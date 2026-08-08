@@ -9,6 +9,7 @@
 | `README.md` | 프로젝트 개요, 빠른 시작, 폴더 구조, 필수요건 6종 체크리스트 |
 | `docs/prd.md` | 한 문장 정의, 문제/목표, MVP 범위(MoSCoW), 기능·비기능 요구사항, 로드맵, 리스크 |
 | `docs/architecture.md` | 카테고리 라우팅 설계(도구 선택+개별 분기, mermaid), 작업 분할 전략, 역할분담표 |
+| `docs/presentation.md` | 미니프로젝트 발표 준비 — 주제 선정 배경/6요소 설계/진행 내용/구현 방식(소통·역할분담) |
 | `docs/navigation.md` | 이 문서 |
 
 ## 코드 (`app/`)
