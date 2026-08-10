@@ -7,11 +7,9 @@
 ## 빠른 시작
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+pre-commit install
+uv sync --dev
 cp .env.example .env   # OPENAI_API_KEY, NAVER_CLIENT_ID/SECRET, LANGCHAIN_API_KEY 채우기
-uvicorn app.main:app --reload
 ```
 
 `.env`는 `.gitignore`로 이미 막혀 있음 — 절대 커밋하지 말 것.
