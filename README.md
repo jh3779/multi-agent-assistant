@@ -46,6 +46,7 @@ app/
 - [docs/architecture.md](docs/architecture.md) — 라우팅 설계(도구 선택 + 개별 분기 처리) 상세, 작업 분할 전략
 - [docs/navigation.md](docs/navigation.md) — 파일별 담당자·역할 한눈에 보기
 - [docs/presentation.md](docs/presentation.md) — 미니프로젝트 발표 준비 자료
+- [docs/branching.md](docs/branching.md) — 브랜치 규칙, PR·리뷰 흐름, AI 협업 시 유의사항
 
 ## 필수요건 6종 체크리스트 (Day5 교안 기준)
 
