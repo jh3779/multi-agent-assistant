@@ -46,6 +46,7 @@ app/
 - [docs/navigation.md](docs/navigation.md) — 파일별 담당자·역할 한눈에 보기
 - [docs/presentation.md](docs/presentation.md) — 미니프로젝트 발표 준비 자료
 - [docs/branching.md](docs/branching.md) — 브랜치 규칙, PR·리뷰 흐름, AI 협업 시 유의사항
+- [docs/multi-agent.md](docs/multi-agent.md) — (초안, 스프린트 범위 밖) 메인/서브 에이전트 오케스트레이션 패턴 검토 메모
 
 ## 필수요건 6종 체크리스트 (Day5 교안 기준)
 
