@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: 의존성 설치
+        run: uv sync --dev
+
+      - name: import 체크
+        run: uv run python -c "import app.main"
+
+      - name: 타입 체크 (pyrefly)
+        run: uv run pyrefly check
