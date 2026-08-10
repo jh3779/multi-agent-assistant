@@ -48,16 +48,8 @@ repos:
         pass_filenames: false
         require_serial: true
 
-      - id: pytest
-        name: pytest
-        entry: uv run pytest
-        language: system
-        pass_filenames: false
-        always_run: true
-        require_serial: true
-
 # Keep remote hook dependencies up to date in pre-commit.ci.
 ci:
   autoupdate_schedule: weekly
-  skip: [ruff-check, ruff-format, pyrefly, pytest]
+  skip: [ruff-check, ruff-format, pyrefly]
   submodules: false
