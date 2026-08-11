@@ -7,9 +7,10 @@
 ## 빠른 시작
 
 ```bash
-pre-commit install
 uv sync --dev
+pre-commit install
 cp .env.example .env   # OPENAI_API_KEY, NAVER_CLIENT_ID/SECRET, LANGCHAIN_API_KEY 채우기
+uv run uvicorn app.main:app --reload
 ```
 
 `.env`는 `.gitignore`로 이미 막혀 있음 — 절대 커밋하지 말 것.
@@ -44,6 +45,8 @@ app/
 - [docs/architecture.md](docs/architecture.md) — 라우팅 설계(도구 선택 + 개별 분기 처리) 상세, 작업 분할 전략
 - [docs/navigation.md](docs/navigation.md) — 파일별 담당자·역할 한눈에 보기
 - [docs/presentation.md](docs/presentation.md) — 미니프로젝트 발표 준비 자료
+- [docs/branching.md](docs/branching.md) — 브랜치 규칙, PR·리뷰 흐름, AI 협업 시 유의사항
+- [docs/multi-agent.md](docs/multi-agent.md) — (초안, 스프린트 범위 밖) 메인/서브 에이전트 오케스트레이션 패턴 검토 메모
 
 ## 필수요건 6종 체크리스트 (Day5 교안 기준)
 
@@ -53,3 +56,83 @@ app/
 - [ ] SSE 스트리밍 엔드포인트
 - [ ] LangSmith 트레이스 링크
 - [ ] `.env` 기반 키 관리
+
+
+                            User Question
+                                   ↓
+                      ┌────────────────────────┐
+                      │        Main LLM        │
+                      │                        │
+                      │  질문 이해 / 라우팅        │
+                      │  Tool 선택 / 결과 취합     │
+                      └───────────┬────────────┘
+                                  │
+              ┌───────────────────┼───────────────────┐
+              │                   │                   │
+              ↓                   ↓                   ↓
+    ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+    │   Tech LLM Tool  │ │  Code LLM Tool   │ │ General LLM Tool │
+    │                  │ │                  │ │                  │
+    │ 기술 질문 전문      │  │ 코드 분석/생성      │ │ 일반 질의/요약      │
+    └─────────┬────────┘ └──────────────────┘ └──────────────────┘
+              │
+              │
+              │     ※ Tech LLM Tool 상세 구조
+              ↓
+    ┌──────────────────────────────┐
+    │          Tech LLM            │
+    │                              │
+    │ 기술 질문 분석 / 작업 계획        │
+    │ 필요한 정보·Tool 결정            │
+    └──────────────┬───────────────┘
+                   ↓
+          ┌──────────────────┐
+          │   Tool Router    │
+          └────────┬─────────┘
+                   │
+        ┌──────────┼───────────┐
+        │          │           │
+        ↓          ↓           ↓
+ ┌────────────┐ ┌────────────┐ ┌────────────┐
+ │ Web Search │ │  YouTube   │ │    News    │
+ │    Tool    │ │ Search Tool│ │ Search Tool│
+ └─────┬──────┘ └─────┬──────┘ └─────┬──────┘
+       │              │              │
+       └──────────────┼──────────────┘
+                      ↓
+             ┌──────────────────┐
+             │ Retrieval        │
+             │ Evaluator LLM    │
+             │                  │
+             │ 검색 결과 평가      │
+             └────────┬─────────┘
+                      ↓
+                정보가 충분한가?
+                  ↙          ↘
+                NO            YES
+                ↓              ↓
+       ┌────────────────┐  ┌────────────────┐
+       │ Query Rewriter │  │ Answer LLM     │
+       │      LLM       │  │                │
+       │                │  │ 검색 결과 기반     │
+       │ 검색어 개선       │  │ 답변 생성        │
+       └───────┬────────┘  └───────┬────────┘
+               │                   │
+               └─→ Tool 재호출      ↓
+                            ┌────────────────┐
+                            │ Answer         │
+                            │ Evaluator LLM  │
+                            │                │
+                            │ 답변 품질 평가    │
+                            └───────┬────────┘
+                                    ↓
+                              답변이 적절한가?
+                                ↙         ↘
+                              NO           YES
+                              ↓             ↓
+                       ┌─────────────┐   Tech LLM
+                       │ Answer      │      ↓
+                       │ Rewriter    │   Main LLM
+                       └──────┬──────┘      ↓
+                              │         User Response
+                              └────→ 재평가

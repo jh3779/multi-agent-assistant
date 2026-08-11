@@ -3,26 +3,23 @@ name = "lg-cns-aicampus"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-authors = [
-    { name = "6691a", email = "6691a@naver.com" }
-]
+authors = []
 requires-python = ">=3.14"
 dependencies = [
+    "langchain",
     "langchain-openai>=1.4.2",
     "langsmith>=0.10.17",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
+    "requests",
 ]
 
-[project.scripts]
-lg-cns-aicampus = "lg_cns_aicampus:main"
-
-[build-system]
-requires = ["uv_build>=0.12.1,<0.13.0"]
-build-backend = "uv_build"
+[tool.uv]
+package = false
 
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.1",
     "pyrefly>=1.2.0",
+    "ruff>=0.14.0",
 ]
