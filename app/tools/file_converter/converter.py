@@ -4,8 +4,13 @@ from tempfile import TemporaryDirectory
 
 import pypandoc
 
-# pandoc이 실제로 읽고/쓸 수 있는 포맷만 등록. PDF는 출력에 별도 엔진(LaTeX 등)이
-# 필요해서 지금은 지원 목록에서 제외 — 필요해지면 추가.
+# pandoc --list-input-formats / --list-output-formats로 실제 지원 여부를 확인하고
+# 등록함. PDF는 뺐음 — pandoc은 PDF용 리더가 아예 없어 입력으로 못 읽고, 출력하려면
+# LaTeX 같은 별도 엔진이 더 필요해서 5일 스프린트엔 부담이라 스코프 제외.
+#
+# 입력/출력을 별도 dict로 둔 이유: 확장자별로 방향에 따라 pandoc 포맷명이 다를 수
+# 있어서(예: txt는 읽을 땐 "markdown"으로 취급 — pandoc엔 순수 텍스트 전용 리더가
+# 없음 — 하지만 쓸 땐 "plain"). 하나로 합치면 이런 비대칭을 표현할 수 없음.
 _INPUT_FORMATS = {
     "docx": "docx",
     "html": "html",
@@ -52,6 +57,9 @@ async def convert(content: bytes, source_format: str, target_format: str) -> byt
             f"(지원 포맷: {', '.join(SUPPORTED_FORMATS)})"
         )
 
+    # pandoc 호출은 subprocess를 기다리는 blocking 작업 — 그대로 부르면 변환하는
+    # 동안 FastAPI의 이벤트 루프가 막혀서 같은 프로세스의 다른 요청(SSE 스트리밍 등)도
+    # 같이 멈춤. 별도 스레드로 돌려서 이벤트 루프는 계속 다른 일을 하게 함.
     return await asyncio.to_thread(
         _convert_sync, content, src_ext, src_pandoc_format, dst_ext, dst_pandoc_format
     )

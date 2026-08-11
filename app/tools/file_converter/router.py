@@ -7,8 +7,15 @@ from app.tools.file_converter.converter import (
     convert,
 )
 
+# 이 라우터는 "사람이 쓰는 채팅 UI"가 fetch()로 직접 호출하는 HTTP API 경로다.
+# LLM이 도구로 호출하는 경로는 별도로 tool.py(FileConverterTool)에 있음 —
+# 두 소비자의 호출 방식이 달라서(HTTP 요청 vs 함수 호출 스키마) 나눠뒀고,
+# 실제 변환 로직(converter.convert)은 하나만 두고 공유한다.
 router = APIRouter(prefix="/tools/file-converter", tags=["file-converter"])
 
+# 텍스트 계열 포맷에 charset=utf-8을 명시한 이유: converter.py의 --standalone
+# 수정(html 자체 선언)과는 별개로, HTTP 레이어에서도 이중으로 인코딩을 명시해
+# 클라이언트가 추측할 여지를 없앰(원래 겪었던 한글 깨짐 버그의 재발 방지).
 _MEDIA_TYPES = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -42,6 +49,8 @@ async def convert_file(file: UploadFile, target_format: str = Form(...)) -> Resp
 
     dst_ext = target_format.lower().lstrip(".")
     media_type = _MEDIA_TYPES.get(dst_ext, "application/octet-stream")
+    # attachment로 강제: 브라우저가 html/txt 등을 새 탭에 바로 렌더링하지 않고
+    # 항상 다운로드하게 함 — 채팅 UI가 "다운로드 링크" UX를 기대하고 있어서.
     return Response(
         content=converted,
         media_type=media_type,
