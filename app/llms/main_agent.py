@@ -9,7 +9,6 @@ from langchain_core.prompts import (
 )
 
 from app.llms.agent import MainLLM, SubLLM
-from app.llms.sub_agents import BaseballAgent, BusinessAgent, DevelopmentAgent
 
 _SYSTEM_PROMPT = (
     "너는 여러 서브 에이전트를 조율하는 메인 에이전트다. "
@@ -68,14 +67,6 @@ class MainAgent(MainLLM):
         yield {"role": "assistant", "content": combined}
 
 
-# 야구/건강은 같은 슬롯(담당자 한 명)의 택1 후보 — 담당자가 정하기 전까지 야구를 기본값으로 사용.
-SPORTS_OR_HEALTH_AGENT = BaseballAgent
-
-
-def build_main_agent(model: Any) -> MainAgent:
-    sub_llms = [
-        BusinessAgent(model),
-        SPORTS_OR_HEALTH_AGENT(model),
-        DevelopmentAgent(model),
-    ]
-    return MainAgent(model, sub_llms)
+# 실제 서브 에이전트(app/llms/sub_agents.py, 서브 에이전트 담당 3명)를 모아
+# MainAgent(model, sub_llms)로 조립하는 코드는 이 파일 밖(예: app/main.py)에서
+# 담당자가 완성하는 대로 연결한다 — main_agent.py는 MainLLM 계약만 구현한다.
