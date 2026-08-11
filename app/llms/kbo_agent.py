@@ -1,11 +1,11 @@
 import asyncio
 import json
 from typing import Any
+from collections.abc import AsyncIterator
 
 from pydantic import BaseModel
 
 from langchain_openai import ChatOpenAI
-
 from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
@@ -15,7 +15,6 @@ from langchain_core.messages import (
 from langchain_core.runnables import RunnableLambda
 
 from app.tools.web_search import WebSearchTool
-
 from app.setting import settings
 
 
@@ -123,7 +122,7 @@ class BaseballAgent:
         messages: list[BaseMessage],
     ) -> list[BaseMessage]:
 
-        print("Calling model ...")
+        print("Calling model...")
         response = (
             await self.model_with_tools.ainvoke(
                 messages
@@ -149,7 +148,7 @@ class BaseballAgent:
             )
 
         try:
-            print(f"Executing tool ({tool_call['name']}) ...")
+            print(f"Executing tool ({tool_call['name']})...")
             result = await tool.ainvoke(
                 tool_call["args"]
             )
@@ -229,18 +228,58 @@ class BaseballAgent:
         )
 
 
+    async def astream(
+        self,
+        query: str,
+    ) -> AsyncIterator[str]:
+
+        messages = create_messages(query)
+
+        for _ in range(MAX_TOOL_ITERATIONS):
+
+            # 먼저 tool 사용 여부 판단
+            response = await self.model_with_tools.ainvoke(
+                messages
+            )
+
+            # tool call이 있으면 실행
+            if response.tool_calls:
+                messages.append(response)
+
+                tool_messages = await self._execute_tools(
+                    response.tool_calls
+                )
+
+                messages.extend(tool_messages)
+
+                continue
+
+            # tool call이 없으면 최종 답변을 streaming
+            async for chunk in self.model.astream(
+                messages
+            ):
+                if chunk.content:
+                    yield chunk.content
+
+            return
+
+        raise RuntimeError(
+            "Maximum tool iterations exceeded."
+        )
+
+
 async def main():
     agent = BaseballAgent()
 
-    result = await agent.ainvoke(
-        "2026년 지금까지의 KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
-    )
-
-    print("\n\n[FIANL RESULT]")
-    print(result.model_dump_json(
-        ensure_ascii=False,
-        indent=2,
-    ))
+    async for chunk in agent.astream(
+        "26년 8월 11일 현재 KBO 순위를 찾고, "
+        "그 순위에서 1위인 구단에 대해 설명해줘."
+    ):
+        print(
+            chunk,
+            end="",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":
