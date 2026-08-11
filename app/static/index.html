@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>어시스턴트 — LG CNS AI 캠퍼스</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span class="brand-name">어시스턴트</span>
+      </div>
+      <button type="button" id="new-chat" class="btn-ghost">새 대화 시작</button>
+    </header>
+
+    <main id="chat-log" class="chat-log" aria-live="polite">
+      <div class="empty-state" id="empty-state">
+        <p>무엇을 도와드릴까요?</p>
+        <p class="empty-state-sub">텍스트로 질문하거나, 파일을 끌어다 놓아 변환할 수 있습니다.</p>
+      </div>
+    </main>
+
+    <div id="drop-overlay" class="drop-overlay" hidden>
+      <p>여기에 파일을 놓으세요</p>
+    </div>
+
+    <form id="composer" class="composer">
+      <button type="button" id="attach-btn" class="btn-icon" aria-label="파일 첨부">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path d="M17.5 8.5 9.6 16.4a3 3 0 1 1-4.24-4.25l8.49-8.48a2 2 0 1 1 2.83 2.83l-8.13 8.13a1 1 0 1 1-1.42-1.42l7.07-7.07" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <input type="file" id="file-input" hidden />
+
+      <textarea
+        id="message-input"
+        class="message-input"
+        placeholder="메시지를 입력하세요..."
+        rows="1"
+        aria-label="메시지 입력"
+      ></textarea>
+
+      <button type="submit" id="send-btn" class="btn-send" aria-label="전송">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 12h15M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+  <script src="/static/chat.js"></script>
+</body>
+</html>
