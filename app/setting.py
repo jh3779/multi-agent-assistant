@@ -1,4 +1,11 @@
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# pydantic-settings의 env_file은 .env 값을 Settings 필드에만 채워줄 뿐 os.environ에는
+# 심지 않는다. 그런데 langsmith/openai SDK는 LANGCHAIN_*·OPENAI_API_KEY를 os.environ에서
+# 직접 읽기 때문에(Settings를 거치지 않음), load_dotenv()로 한 번 더 실제 프로세스
+# 환경변수에 심어줘야 LangSmith 트레이싱이 켜지고 ChatOpenAI()가 키를 자동으로 찾는다.
+load_dotenv()
 
 
 class Settings(BaseSettings):
