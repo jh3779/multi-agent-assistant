@@ -6,12 +6,13 @@ readme = "README.md"
 authors = []
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi",
+    "fastapi>=0.141.1",
     "uvicorn[standard]",
     "python-multipart",
     "pypandoc",
     "langchain",
     "langchain-openai>=1.4.2",
+    "langchain-tavily",
     "langsmith>=0.10.17",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
@@ -28,3 +29,9 @@ dev = [
     "pyrefly>=1.2.0",
     "ruff>=0.14.0",
 ]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+quote-style = "double"
