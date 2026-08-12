@@ -7,16 +7,30 @@ const attachBtn = document.getElementById("attach-btn");
 const fileInput = document.getElementById("file-input");
 const dropOverlay = document.getElementById("drop-overlay");
 const newChatBtn = document.getElementById("new-chat");
+const agentSelector = document.getElementById("agent-selector");
 
 const TOOL_LABELS = {
   tech_llm_tool: "Tech LLM Tool",
   code_llm_tool: "Code LLM Tool",
   general_llm_tool: "General LLM Tool",
   file_converter: "파일 변환",
+  web_search: "웹 검색",
+  date_time: " 현재 시간 조회",
 };
 
 let supportedFormats = [];
 let isSending = false;
+let selectedAgent = "file_converter";
+
+agentSelector.querySelectorAll(".agent-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    selectedAgent = btn.dataset.agent;
+    agentSelector
+      .querySelectorAll(".agent-btn")
+      .forEach((b) => b.classList.toggle("active", b === btn));
+  });
+});
 
 function hideEmptyState() {
   emptyState.style.display = "none";
@@ -43,6 +57,16 @@ function addToolStatus(toolName) {
   el.innerHTML = `<span class="dot" aria-hidden="true"></span><span>${
     TOOL_LABELS[toolName] || toolName
   } 호출 중...</span>`;
+  chatLog.appendChild(el);
+  scrollToBottom();
+  return el;
+}
+
+function addProcessingIndicator() {
+  hideEmptyState();
+  const el = document.createElement("div");
+  el.className = "tool-status";
+  el.innerHTML = `<span class="dot" aria-hidden="true"></span><span>처리 중...</span>`;
   chatLog.appendChild(el);
   scrollToBottom();
   return el;
@@ -79,8 +103,47 @@ async function sendMessage(text) {
   sendBtn.disabled = true;
   messageInput.disabled = true;
 
-  let toolStatusEl = null;
+  try {
+    if (selectedAgent === "kbo") {
+      await sendToKBO(text);
+    } else {
+      await sendToFileConverter(text);
+    }
+  } finally {
+    isSending = false;
+    sendBtn.disabled = false;
+    messageInput.disabled = false;
+    messageInput.focus();
+  }
+}
+
+async function sendToKBO(text) {
+  const processingEl = addProcessingIndicator();
+
+  try {
+    const res = await fetch("/kbo/invoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: text }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`서버 오류 (${res.status})`);
+    }
+
+    const data = await res.json();
+    processingEl.remove();
+    addMessage("assistant", data.answer);
+  } catch (err) {
+    processingEl.remove();
+    addErrorMessage(`답변을 받지 못했습니다: ${err.message}`, () => sendMessage(text));
+  }
+}
+
+async function sendToFileConverter(text) {
+  const toolStatusEls = new Map();
   let answerEl = null;
+  let processingEl = addProcessingIndicator();
 
   try {
     const res = await fetch("/chat", {
@@ -110,14 +173,23 @@ async function sendMessage(text) {
         if (!line.startsWith("data:")) continue;
         const event = JSON.parse(line.slice(5).trim());
 
+        if (processingEl && event.type !== "done") {
+          processingEl.remove();
+          processingEl = null;
+        }
+
         if (event.type === "tool_start") {
-          toolStatusEl = addToolStatus(event.tool);
-        } else if (event.type === "tool_end") {
-          if (toolStatusEl) {
-            toolStatusEl.remove();
-            toolStatusEl = null;
-          }
-        } else if (event.type === "answer_chunk") {
+          const el = addToolStatus(event.tool);
+          toolStatusEls.set(event.tool, el);
+
+          } else if (event.type === "tool_end") {
+            const el = toolStatusEls.get(event.tool);
+
+            if (el) {
+              el.remove();
+              toolStatusEls.delete(event.tool);
+            }
+          } else if (event.type === "answer_chunk") {
           if (!answerEl) {
             answerEl = addMessage("assistant", "");
             answerEl.classList.add("streaming");
@@ -130,13 +202,14 @@ async function sendMessage(text) {
       }
     }
   } catch (err) {
-    if (toolStatusEl) toolStatusEl.remove();
+    for (const el of toolStatusEls.values()) {
+      el.remove();
+    }
+
+    toolStatusEls.clear();
     addErrorMessage(`답변을 받지 못했습니다: ${err.message}`, () => sendMessage(text));
   } finally {
-    isSending = false;
-    sendBtn.disabled = false;
-    messageInput.disabled = false;
-    messageInput.focus();
+    if (processingEl) processingEl.remove();
   }
 }
 

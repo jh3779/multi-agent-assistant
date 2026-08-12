@@ -29,6 +29,13 @@
       <p>여기에 파일을 놓으세요</p>
     </div>
 
+    <div id="agent-selector" class="agent-selector" role="group" aria-label="에이전트 선택">
+      <button type="button" class="agent-btn active" data-agent="file_converter">파일 변환</button>
+      <button type="button" class="agent-btn" data-agent="kbo">KBO</button>
+      <button type="button" class="agent-btn" data-agent="business" disabled title="아직 연결되지 않았습니다">비즈니스</button>
+      <button type="button" class="agent-btn" data-agent="agent4" disabled title="아직 연결되지 않았습니다">준비 중</button>
+    </div>
+
     <form id="composer" class="composer">
       <button type="button" id="attach-btn" class="btn-icon" aria-label="파일 첨부">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75">

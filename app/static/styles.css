@@ -309,6 +309,51 @@ body {
   display: none;
 }
 
+/* Agent selector */
+.agent-selector {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.agent-btn {
+  background: var(--color-primary);
+  color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 150ms,
+    color 150ms,
+    background 150ms;
+}
+
+.agent-btn:hover:not(:disabled) {
+  border-color: var(--color-foreground);
+  color: var(--color-foreground);
+}
+
+.agent-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.agent-btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.agent-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Composer */
 .composer {
   display: flex;
