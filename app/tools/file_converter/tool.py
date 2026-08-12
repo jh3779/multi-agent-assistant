@@ -2,13 +2,12 @@ import tempfile
 from pathlib import Path
 
 from langchain_core.tools import ToolException, tool
-from pydantic import BaseModel, Field
 
-from app.tools.file_converter.converter import (
-    SUPPORTED_FORMATS,
+from app.schemas.file_converter import FileConverterArgs
+from app.tools.file_converter.converter import convert
+from app.tools.file_converter.exceptions import (
     ConversionTimeoutError,
     UnsupportedFormatError,
-    convert,
 )
 
 # LLM이 자유롭게 채우는 file_path를 검증 없이 그대로 읽으면 임의 파일 읽기가
@@ -18,16 +17,7 @@ ALLOWED_DIR = Path(tempfile.gettempdir()) / "lg-cns-file-converter-uploads"
 ALLOWED_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class FileConverterArgs(BaseModel):
-    file_path: str = Field(
-        description="변환할 원본 파일의 서버 측 경로(업로드 디렉터리 내부)"
-    )
-    target_format: str = Field(
-        description=f"변환할 대상 포맷. 지원 포맷: {', '.join(SUPPORTED_FORMATS)} (PDF 미지원)"
-    )
-
-
-# "LLM이 도구로 호출하는" 경로 — 채팅 UI가 fetch()로 직접 부르는 router.py와는
+# "LLM이 도구로 호출하는" 경로 — 채팅 UI가 fetch()로 직접 부르는 app/routers/file_converter.py와는
 # 별개다. 이쪽은 app/llms/file_converter_agent.py의 ask()가 진짜 LLM(gpt-4o-mini)
 # 에이전트 루프 안에서 호출한다(실제 OPENAI_API_KEY로 docx/html 변환까지
 # end-to-end 검증됨). 다만 아직 HTTP 엔드포인트로는 안 열려있어 채팅 UI에서

@@ -9,8 +9,8 @@ from langchain_core.messages import ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import ToolException
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
 
+from app.schemas.file_converter import FileConversionAnswer
 from app.setting import settings
 from app.tools.file_converter.tool import file_converter
 
@@ -26,14 +26,6 @@ _PROMPT = ChatPromptTemplate.from_messages(
         ("human", "{question}"),
     ]
 )
-
-
-class FileConversionAnswer(BaseModel):
-    used_tool: bool = Field(description="file_converter 도구를 실제로 호출했는지")
-    tool_name: str | None = Field(
-        default=None, description="호출한 도구 이름(안 썼으면 null)"
-    )
-    summary: str = Field(description="사용자에게 보여줄 결과 요약")
 
 
 async def ask(

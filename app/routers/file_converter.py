@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
-from app.tools.file_converter.converter import (
-    SUPPORTED_FORMATS,
+from app.tools.file_converter.converter import SUPPORTED_FORMATS, convert
+from app.tools.file_converter.exceptions import (
     ConversionTimeoutError,
     UnsupportedFormatError,
-    convert,
 )
 
 # 업로드 크기 상한 — 없으면 요청 하나가 서버 메모리를 무제한으로 잡아먹을 수 있음.
@@ -48,7 +47,8 @@ async def convert_file(file: UploadFile, target_format: str = Form(...)) -> Resp
     content = await file.read()
     if len(content) > _MAX_UPLOAD_BYTES:
         raise HTTPException(
-            413, f"파일이 너무 큽니다 (최대 {_MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"
+            413,
+            f"파일이 너무 큽니다 (최대 {_MAX_UPLOAD_BYTES // (1024 * 1024)}MB)",  # 이거 fastAPI에서 413으로 처리되나? 확인 필요
         )
 
     try:

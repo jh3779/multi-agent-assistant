@@ -4,6 +4,11 @@ from tempfile import TemporaryDirectory
 
 import pypandoc
 
+from app.tools.file_converter.exceptions import (
+    ConversionTimeoutError,
+    UnsupportedFormatError,
+)
+
 # pandoc --list-input-formats / --list-output-formats로 실제 지원 여부를 확인하고
 # 등록함. PDF는 뺐음 — pandoc은 PDF용 리더가 아예 없어 입력으로 못 읽고, 출력하려면
 # LaTeX 같은 별도 엔진이 더 필요해서 5일 스프린트엔 부담이라 스코프 제외.
@@ -46,14 +51,7 @@ SUPPORTED_FORMATS = sorted(set(_INPUT_FORMATS) | set(_OUTPUT_FORMATS))
 CONVERT_TIMEOUT_SECONDS = 30
 
 
-class UnsupportedFormatError(ValueError):
-    pass
-
-
-class ConversionTimeoutError(RuntimeError):
-    pass
-
-
+## 변환 로직 — app/routers/file_converter.py와 tool.py에서 공유한다.
 async def convert(content: bytes, source_format: str, target_format: str) -> bytes:
     src_ext = source_format.lower().lstrip(".")
     dst_ext = target_format.lower().lstrip(".")
