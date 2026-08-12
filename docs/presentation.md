@@ -29,25 +29,31 @@
 
 | 요소 | 상태 | 설명 |
 |---|:---:|---|
-| ① 프롬프트 전략 | ⚠️ 미착수 | file-converter는 pandoc만 쓰는 순수 변환 도구라 프롬프트가 없음. 채팅 API(`/chat`)는 목(mock) 구현을 폐기해서 현재 엔드포인트 자체가 없음 — **팀 전체에서 아직 아무도 안 채운 항목** |
-| ② 체인 구조 | ⚠️ 미착수 | `POST /chat`이 키워드 매칭으로 tech/code/general 중 하나를 "호출한 척"하던 목(mock)은 폐기됨 — 진짜 LLM 체인은 아직 없음, 실제 백엔드 담당 미정 |
-| ③ 도구 목록 | ✅ 완료 | `file_converter`를 두 형태로 노출 — HTTP API(`POST /tools/file-converter/convert`)와 LangChain `@tool` 데코레이터 함수(`file_converter`, 나중에 진짜 Main LLM이 생기면 그대로 `bind_tools()`에 넘기면 됨) |
+| ① 프롬프트 전략 | ✅ 완료 | `FileConverterAgent`(`app/llms/file_converter_agent.py`)가 시스템 프롬프트(`_SYSTEM_PROMPT`)를 `ChatPromptTemplate`으로 구성해 하드코딩 없이 관리. 다만 이건 채팅 UI의 `/chat`과는 아직 연결 안 된 별도 경로 |
+| ② 체인 구조 | ✅ 완료(부분) | `FileConverterAgent`가 팀 공용 `Agent(ABC)`(`app/llms/agent.py`)를 실제로 상속한 첫 구현체 — 프롬프트→도구 선택(Function Calling)→도구 실행→도구 결과 검증(`validate_tool_result`)→구조화 답변→답변 검증(`answer_validation`) 전체 파이프라인을 갖춤. `POST /chat`이 쓰던 목(mock) 체인은 폐기됨 |
+| ③ 도구 목록 | ✅ 완료 | `file_converter`를 두 형태로 노출 — HTTP API(`POST /tools/file-converter/convert`)와 LangChain `@tool` 데코레이터 함수(`file_converter`, `FileConverterAgent`가 `bind_tools()`로 실제 호출) |
 | ④ 상태 관리 | ✅ 완료(의도적으로 무상태) | 멀티턴 대화 **미지원으로 확정**(DEC-001) — 매 요청이 이전 맥락과 무관한 독립 처리. 세션/로그인도 없음 |
-| ⑤ 스트리밍 | ⚠️ 미착수 | 목(mock)이 SSE로 `tool_start`/`tool_end`/`answer_chunk`/`done` 이벤트를 스트리밍하던 구현은 폐기됨 — 프론트(`chat.js`)의 이벤트 처리 로직은 남아있어 진짜 백엔드가 같은 계약으로 붙으면 재사용 가능 |
-| ⑥ 비용·지연 | N/A | pandoc은 로컬 바이너리 변환이라 OpenAI 비용 없음. LLM 붙는 부분은 다른 담당자가 실측 필요 |
+| ⑤ 스트리밍 | ⚠️ 부분 | `FileConverterAgent.astream()`이 `AsyncIterator[str]`을 반환하도록 인터페이스는 갖춰져 있음(현재는 완성된 요약을 한 청크로 yield). 다만 HTTP SSE 엔드포인트로는 아직 안 열려있어 실제 스트리밍 데모는 불가 — 목(mock)이 하던 `/chat` SSE는 폐기됨 |
+| ⑥ 비용·지연 | 부분 실측 | pandoc 자체는 로컬 바이너리 변환이라 비용 없음. `FileConverterAgent`는 `gpt-4o-mini` 호출 1~2회(도구 판단 1회 + 구조화 출력 1회) — 정확한 토큰/비용 실측은 아직 미착수 |
+| LangSmith 트레이스 | ✅ 사실상 완료 | `.env`에 `LANGCHAIN_TRACING_V2=true`+`LANGCHAIN_API_KEY`+`LANGCHAIN_PROJECT`가 설정돼 있어, `FileConverterAgent`가 만든 모든 `ChatOpenAI` 호출이 별도 코드 없이 자동으로 LangSmith에 트레이스됨(이번 세션에 실행한 라이브 테스트들도 전부 트레이스 남았을 것) |
 
 **왜 Main LLM이 꼭 필요하진 않은가** — 팀 내부에서 나온 질문. Main LLM은 여러 Tool 중 뭘 쓸지 **라우팅**하는 역할일 뿐, 프롬프트·구조화출력·LangSmith 트레이스가 실제로 나오는 지점은 각 Tool 안의 LLM이다. 지금처럼 실질적으로 쓸 수 있는 Tool이 하나(또는 소수)뿐이면, 라우팅 없이 그 Tool의 LLM 하나로도 필수요건은 채울 수 있다 — 다만 Tool이 여러 개로 늘면 자동 라우팅이 없어서 사용자가 직접 골라야 하는 게 트레이드오프.
 
 ## 3. 진행 내용 (프롬프트 템플릿, 도구 구성 등)
 
 **도구 구성 — file-converter**
-- `app/tools/file_converter/converter.py` — pandoc 기반 변환 로직. 지원 포맷: docx, html, md, odt, pptx, epub, rst, rtf, txt (**PDF 미지원** — pandoc이 PDF를 입력으로 못 읽고, 출력엔 별도 LaTeX 엔진 필요해서 스코프 제외)
-- `app/routers/file_converter.py` — FastAPI HTTP API(`/convert`, `/formats`)
+- `app/tools/file_converter/converter.py` — pandoc 기반 변환 로직만 담당(예외 클래스는 `exceptions.py`로 분리해 "개발 파일엔 로직만" 원칙 유지). 지원 포맷: docx, html, md, odt, pptx, epub, rst, rtf, txt (**PDF 미지원** — pandoc이 PDF를 입력으로 못 읽고, 출력엔 별도 LaTeX 엔진 필요해서 스코프 제외)
+- `app/routers/file_converter.py` — FastAPI HTTP API(`/convert`, `/formats`). 원래 `app/tools/file_converter/router.py`였는데 `app/schemas/`와 같은 결로 `app/routers/`에 도메인명 파일로 정리
 - `app/tools/file_converter/tool.py` — LangChain `@tool` 데코레이터로 선언한 `file_converter` 함수. `response_format="content_and_artifact"`로 LLM에게 줄 텍스트 요약과 실제 변환 바이트를 분리 반환
+- `app/llms/file_converter_agent.py` — `FileConverterAgent`. 팀 공용 `Agent(ABC)`를 실제로 상속한 첫 구현체. `astream()`이 `AsyncIterator[str]`만 반환할 수 있어서, 변환된 파일 바이트(artifact)는 반환값이 아니라 `self.memory["artifacts"]`에 담아 호출 후 꺼내 쓰게 설계 — 이 트레이드오프 자체가 좋은 발표 소재(공용 인터페이스와 실제 도구 요구사항이 충돌할 때 어떻게 절충했는지)
 - **버그 발견·수정 스토리(발표 소재로 좋음)**: docx→html 변환 시 한글이 깨지는 문제 발견 → 원인은 pandoc이 html 출력 시 `<head>` 없는 "조각(fragment)"만 내보내서 `<meta charset="utf-8">` 선언이 아예 없었던 것 → `--standalone` 옵션으로 완전한 문서를 만들게 해서 해결. 전체 9개 포맷을 한글/중국어/일본어/악센트 문자로 왕복 테스트해서 재검증
 
 **프롬프트 템플릿**
-- 현재 없음(위 6요소 표 참고) — 다른 담당자의 LLM Tool 파트에서 채워야 함
+- `FileConverterAgent`의 `_SYSTEM_PROMPT` — `ChatPromptTemplate`으로 구성, 하드코딩 문자열을 직접 모델에 넘기지 않고 템플릿화
+
+**구조화 출력 (Pydantic)**
+- `app/schemas/file_converter.py` — `FileConverterArgs`(도구 입력), `FileConversionAnswer`(최종 답변: `used_tool`/`tool_name`/`summary`)
+- `app/llms/file_converter_agent.py`의 `ToolResultCheck`(도구 실행 결과 검증), `AnswerCheck`(최종 답변이 실제 실행 결과와 모순되지 않는지 검증) — `Agent(ABC)`가 요구하는 `validate_tool_result`/`answer_validation`을 자리채우기가 아니라 실제로 의미 있게 구현
 
 **채팅 UI 구성**
 - `app/static/index.html`·`styles.css`·`chat.js` — 다크모드(Vercel 스타일), 텍스트 질문 + SSE 스트리밍, 파일 드래그·업로드·변환, 도구 호출 상태 실시간 표시
@@ -61,6 +67,8 @@
 
 **현재까지 진행 상태**
 - file-converter + 채팅 UI + 관련 문서를 PR #6으로 묶어서 올림, 리뷰 대기 중
+- 팀원의 KBO 야구 Q&A 에이전트가 PR #7로 올라옴(웹 검색+날짜 도구, 생성→검증→수정 루프, `POST /kbo/query`) — 리뷰 대기 중, 아직 main 미병합
+- business-agent 담당 팀원은 아직 베이스 클래스 스캐폴딩 단계 — 실제 기능 미착수
 - main 브랜치는 현재 보호 규칙 해제 상태(팀 판단으로 계속 열어두기로 함)
 
 ## 4. 구현 방식 (소통 방법, 역할 분담)
@@ -73,9 +81,10 @@
 
 | 역할 | 담당 | 비고 |
 |---|---|---|
-| 도구호출 + 웹 디자인 | 나 | file-converter 도구(HTTP API + LangChain Tool), 채팅 UI(다크모드, SSE, 파일 업로드) |
+| 도구호출 + 웹 디자인 | 나 | file-converter 도구(HTTP API + LangChain Tool + `Agent(ABC)` 구현체), 채팅 UI(다크모드, SSE, 파일 업로드) |
 | Agent 베이스 클래스 | 421079a | `app/llms/agent.py`(`Agent(ABC)`), `app/tools/base.py`(`BaseTool`) — 계속 갱신 중 |
-| 나머지 Tool(Tech/Code/General 등) | 미정 | Main LLM 폐기 이후 공백 — README 구조도의 Tool들 중 실제로 구현된 건 file-converter뿐 |
+| KBO 야구 Q&A 에이전트 | 팀원(kbo-agent 브랜치) | 웹 검색(Tavily)+날짜 도구, 생성→검증→수정 루프, `POST /kbo/query`(PR #7) |
+| business-agent | 팀원(business-agent 브랜치) | 스캐폴딩만 존재, 실제 주제·기능 미정 |
 
 **작업 순서**: 팀원이 공통 베이스 클래스(`Agent`, `BaseTool`)를 만들고, 그 위에서 각자 자기 Tool을 독립적으로 구현 → FastAPI 앱(`app/main.py`)에 라우터/도구로 연결하는 방식. 카테고리별로 서비스를 통째로 나누는 방식(뉴스봇 시절 결정)도, Main LLM이 전부 오케스트레이션하는 방식도 둘 다 기각하고, 지금은 "각자 도구 + 필요하면 나중에 라우팅 계층 추가"로 정리됨.
 
