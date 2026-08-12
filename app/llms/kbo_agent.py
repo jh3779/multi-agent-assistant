@@ -49,7 +49,7 @@ Use tools autonomously when needed.
 Answer in Korean unless otherwise requested.
 """
 
-
+# TODO: 시스템 프롬프트 고도화
 VALIDATION_PROMPT = """
 You are a validator for a KBO baseball agent.
 
@@ -78,20 +78,16 @@ Do not rewrite the answer yourself.
 # Schema
 # =========================================================
 
+
 class ValidationResult(BaseModel):
     """Validation result for a generated answer."""
 
     is_valid: bool = Field(
         description="Whether the answer is factually correct and supported."
     )
-
-    reason: str = Field(
-        description="Reason for the validation result."
-    )
-
+    reason: str = Field(description="Reason for the validation result.")
     correction: str | None = Field(
-        default=None,
-        description="Correction instructions if the answer is invalid."
+        default=None, description="Correction instructions if the answer is invalid."
     )
 
 
@@ -99,10 +95,13 @@ class ValidationResult(BaseModel):
 # Message Helpers
 # =========================================================
 
+
 def create_messages(
     query: str,
 ) -> list[BaseMessage]:
-    """Create initial messages for the baseball agent."""
+    """
+    Create initial messages for the KBO agent.
+    """
 
     return [
         SystemMessage(content=MAIN_PROMPT),
@@ -113,12 +112,12 @@ def create_messages(
 def collect_evidence(
     messages: list[BaseMessage],
 ) -> str:
-    """Collect tool outputs used as evidence."""
+    """
+    Collect tool outputs used as evidence.
+    """
 
     evidence = [
-        message.content
-        for message in messages
-        if isinstance(message, ToolMessage)
+        message.content for message in messages if isinstance(message, ToolMessage)
     ]
 
     return "\n\n".join(evidence)
@@ -128,8 +127,8 @@ def collect_evidence(
 # Agent
 # =========================================================
 
-class BaseballAgent:
 
+class KBOAgent:
     def __init__(self):
 
         # -------------------------------------------------
@@ -143,10 +142,7 @@ class BaseballAgent:
             ),
         ]
 
-        self.tool_map = {
-            tool.name: tool
-            for tool in self.tools
-        }
+        self.tool_map = {tool.name: tool for tool in self.tools}
 
         # -------------------------------------------------
         # Model
@@ -158,15 +154,9 @@ class BaseballAgent:
             temperature=TEMPERATURE,
         )
 
-        # Model used for autonomous tool calling.
-        self.model_with_tools = self.model.bind_tools(
-            self.tools
-        )
+        self.model_with_tools = self.model.bind_tools(self.tools)
 
-        # Model used for structured validation.
-        self.validator = self.model.with_structured_output(
-            ValidationResult
-        )
+        self.validator = self.model.with_structured_output(ValidationResult)
 
     # =====================================================
     # Answer Generation
@@ -178,26 +168,18 @@ class BaseballAgent:
     ) -> tuple[str, str]:
         """
         Generate a draft answer.
-
-        The model may call tools multiple times.
-        Returns the draft answer and collected evidence.
         """
 
         messages = create_messages(query)
 
         for _ in range(MAX_TOOL_ITERATIONS):
-
             print("\n[MODEL] Calling model...")
 
-            response = await self.model_with_tools.ainvoke(
-                messages
-            )
+            response = await self.model_with_tools.ainvoke(messages)
 
             messages.append(response)
 
-            # Tool call이 없으면 draft 생성 완료
             if not response.tool_calls:
-
                 answer = response.content
                 evidence = collect_evidence(messages)
 
@@ -209,16 +191,11 @@ class BaseballAgent:
 
                 return answer, evidence
 
-            # 여러 Tool call을 병렬 실행
-            tool_messages = await self._execute_tools(
-                response.tool_calls
-            )
+            tool_messages = await self._execute_tools(response.tool_calls)
 
             messages.extend(tool_messages)
 
-        raise RuntimeError(
-            "Maximum tool iterations exceeded."
-        )
+        raise RuntimeError("Maximum tool iterations exceeded.")
 
     # =====================================================
     # Tool Execution
@@ -228,11 +205,11 @@ class BaseballAgent:
         self,
         tool_call: dict[str, Any],
     ) -> ToolMessage:
-        """Execute a single tool call."""
+        """
+        Execute a single tool call.
+        """
 
-        tool = self.tool_map.get(
-            tool_call["name"]
-        )
+        tool = self.tool_map.get(tool_call["name"])
 
         if tool is None:
             return ToolMessage(
@@ -241,14 +218,9 @@ class BaseballAgent:
             )
 
         try:
-            print(
-                f"\n[TOOL] Executing "
-                f"{tool_call['name']}..."
-            )
+            print(f"\n[TOOL] Executing {tool_call['name']}...")
 
-            result = await tool.ainvoke(
-                tool_call["args"]
-            )
+            result = await tool.ainvoke(tool_call["args"])
 
             return ToolMessage(
                 content=json.dumps(
@@ -269,14 +241,13 @@ class BaseballAgent:
         self,
         tool_calls: list[dict[str, Any]],
     ) -> list[ToolMessage]:
-        """Execute multiple tool calls concurrently."""
+        """
+        Execute multiple tool calls concurrently.
+        """
 
         return list(
             await asyncio.gather(
-                *[
-                    self._execute_tool(tool_call)
-                    for tool_call in tool_calls
-                ]
+                *[self._execute_tool(tool_call) for tool_call in tool_calls]
             )
         )
 
@@ -290,14 +261,14 @@ class BaseballAgent:
         answer: str,
         evidence: str,
     ) -> ValidationResult:
-        """Validate the draft answer using collected evidence."""
+        """
+        Validate the draft answer using collected evidence.
+        """
 
         print("\n[VALIDATION] Validating answer...")
 
         messages = [
-            SystemMessage(
-                content=VALIDATION_PROMPT
-            ),
+            SystemMessage(content=VALIDATION_PROMPT),
             HumanMessage(
                 content=f"""
 Question:
@@ -312,9 +283,7 @@ Evidence:
             ),
         ]
 
-        return await self.validator.ainvoke(
-            messages
-        )
+        return await self.validator.ainvoke(messages)
 
     # =====================================================
     # Correction
@@ -327,14 +296,14 @@ Evidence:
         evidence: str,
         validation: ValidationResult,
     ) -> str:
-        """Correct an invalid answer using validation feedback."""
+        """
+        Correct an invalid answer using validation feedback.
+        """
 
         print("\n[CORRECTION] Correcting answer...")
 
         messages = [
-            SystemMessage(
-                content=MAIN_PROMPT
-            ),
+            SystemMessage(content=MAIN_PROMPT),
             HumanMessage(
                 content=f"""
 Original question:
@@ -358,9 +327,7 @@ and supported by the evidence.
             ),
         ]
 
-        response = await self.model.ainvoke(
-            messages
-        )
+        response = await self.model.ainvoke(messages)
 
         return response.content
 
@@ -378,9 +345,7 @@ and supported by the evidence.
         """
 
         # 1. Generate draft answer
-        answer, evidence = await self._generate_answer(
-            query
-        )
+        answer, evidence = await self._generate_answer(query)
 
         # 2. Validate draft answer
         validation = await self._validate(
@@ -395,14 +360,8 @@ and supported by the evidence.
             return answer
 
         print("\n[VALIDATION] Failed")
-        print(
-            f"[VALIDATION] Reason: "
-            f"{validation.reason}"
-        )
-        print(
-            f"[VALIDATION] Correction: "
-            f"{validation.correction}"
-        )
+        print(f"[VALIDATION] Reason: {validation.reason}")
+        print(f"[VALIDATION] Correction: {validation.correction}")
 
         # 4. Correct invalid answer
         corrected_answer = await self._correct(
@@ -422,13 +381,13 @@ and supported by the evidence.
 # Test
 # =========================================================
 
+
 async def main():
 
-    agent = BaseballAgent()
+    agent = KBOAgent()
 
     result = await agent.ainvoke(
-        "26년 8월 11일 현재 KBO 순위를 찾고, "
-        "그 순위에서 1위인 구단에 대해 설명해줘."
+        "26년 8월 11일 현재 KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
     )
 
     print("\n[FINAL] Answer:")

@@ -7,9 +7,7 @@ from app.tools.base import BaseTool
 
 class WebSearchTool(BaseTool):
     name: str = "web_search"
-    description: str = (
-        "Search the web for information from external sources."
-    )
+    description: str = "Search the web for information from external sources."
 
     max_results: int = 5
     search_depth: str = "advanced"
@@ -26,9 +24,7 @@ class WebSearchTool(BaseTool):
             search_depth=self.search_depth,
         )
 
-        return tavily.invoke(
-            {"query": query}
-        )
+        return tavily.invoke({"query": query})
 
     async def _arun(
         self,
@@ -42,6 +38,4 @@ class WebSearchTool(BaseTool):
             search_depth=self.search_depth,
         )
 
-        return await tavily.ainvoke(
-            {"query": query}
-        )
+        return await tavily.ainvoke({"query": query})

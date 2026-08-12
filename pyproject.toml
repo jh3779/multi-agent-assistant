@@ -23,3 +23,9 @@ dev = [
     "pyrefly>=1.2.0",
     "ruff>=0.14.0",
 ]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+quote-style = "double"
