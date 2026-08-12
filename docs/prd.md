@@ -65,10 +65,10 @@
 - 채팅 UI(`app/static/`) — 다크모드, 파일 드래그·업로드·변환, 도구 호출 상태 표시. PR #6 OPEN.
 - 공통 베이스 클래스 — `Agent(ABC)`(`app/llms/agent.py`), `BaseTool`(`app/tools/base.py`). main 병합됨.
 - KBO 에이전트 — 웹 검색(Tavily) + 날짜 도구, 답변 생성→검증→(필요 시) 수정 루프, `POST /kbo/query`. PR #7 OPEN.
+- 채팅 UI ↔ 실제 LLM 백엔드 연결 — 프론트 검증용이던 목(mock, `chat_mock.py`)을 폐기하고 `app/routers/chat.py`가 `FileConverterAgent`를 실제로 호출하는 `POST /chat` SSE 엔드포인트로 대체. 단 채팅 텍스트는 파일 경로를 안 보내므로 일반 질문에만 답하고, 실제 파일 변환은 여전히 드래그앤드롭 전용.
 
 **진행 중 / 미정**
 - business-agent — 베이스 클래스를 상속할 준비만 된 스캐폴딩 상태, 실제 기능 미착수(담당자·범위 미정).
-- 채팅 UI ↔ 실제 LLM 백엔드 연결 — 프론트 검증용이던 목(mock, `chat_mock.py`)을 폐기해 현재 `POST /chat`은 404. 어떤 백엔드(KBO 에이전트? 다른 도구? 라우팅 계층?)를 연결할지 담당·방식 모두 미정.
 
 **Won't (스코프 제외, 팀 결정으로 폐기)**
 - Main LLM이 하위 Tool을 라우팅하는 오케스트레이션 계층.
@@ -86,6 +86,7 @@
 | FR-KBO-003 | 초안 답변을 별도 검증(validation) LLM 호출로 사실관계·날짜 일관성을 점검하고, 불합격 시 근거에 기반해 자동으로 다시 작성(correction)한다 |
 | FR-BASE-001 | 팀 공용 `Agent(ABC)`가 `create_system_prompt`/`create_human_prompt`/`create_workflow`/`validate_tool_result`/`answer_validation`/`astream` 추상 메서드를 정의해, 각 도구가 최소한의 동일한 인터페이스를 따르도록 한다. `FileConverterAgent`가 첫 실제 구현체(`app/llms/file_converter_agent.py`) — `astream`이 `AsyncIterator[str]`만 반환할 수 있어 변환된 파일 바이트(artifact)는 반환값이 아니라 `self.memory["artifacts"]`에 담아 호출자가 실행 후 꺼내 쓰게 함. KBO 에이전트는 아직 이 베이스를 상속하지 않고 독립 클래스로 구현되어 있음 — 통일 여부는 Open Question |
 | FR-BASE-002 | 팀 공용 `BaseTool`이 `settings`(API 키 등)를 공유해, 각 도구가 설정 로딩을 중복 구현하지 않게 한다 |
+| FR-CHAT-001 | `POST /chat`(`app/routers/chat.py`)이 `FileConverterAgent.astream()`을 SSE(`text/event-stream`)로 노출한다. 이벤트 계약(`tool_start`/`tool_end`/`answer_chunk`/`done`)은 폐기된 목(mock)과 동일하게 맞춰 프론트(`chat.js`) 수정 없이 재사용한다. 채팅 텍스트는 파일 경로를 같이 보내지 않으므로, 실제 파일 변환 요청이 아니라 일반 질문에 답하는 용도로만 쓰인다 |
 | FR-008 | API 키(OpenAI, Tavily 등)는 `.env`로 관리하고 저장소에 커밋하지 않는다 |
 
 ## 9. 비기능 요구사항
@@ -118,6 +119,17 @@
 → 최종 답변 응답
 ```
 
+### FLOW-CHAT-001 · 채팅 UI 텍스트 메시지
+
+```
+사용자 텍스트 입력(POST /chat)
+→ FileConverterAgent.astream(message) 호출
+→ 도구 호출 여부 판단(Function Calling) — file_path가 없으므로 보통 미호출
+→ (도구를 썼다면) tool_start/tool_end SSE 이벤트 먼저 전송
+→ 완성된 답변을 answer_chunk 이벤트로 전송(현재는 한 번에 통짜로)
+→ done 이벤트로 스트림 종료
+```
+
 ## 11. 진행 경과
 
 과거 버전(v0.1)의 "커리큘럼 로드맵"은 뉴스봇 전제라 더 이상 맞지 않아 제거하고, 실제 진행 경과로 대체한다.
@@ -147,7 +159,7 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 | 리스크 | 완화책 |
 |---|---|
 | business-agent가 아직 스캐폴딩 단계라 발표 전 미완성일 위험 | 담당·범위를 조속히 확정 필요(Open Question), 최악의 경우 팀 전체 필수요건 6종은 file-converter+KBO 두 도구만으로도 채울 수 있는지 사전 점검 |
-| 채팅 UI(`/chat`)가 어떤 백엔드에도 연결되지 않은 상태로 발표를 맞을 위험 | KBO 에이전트든 다른 도구든 최소 하나를 `/chat`에 연결하는 담당을 정해야 함 |
+| `POST /chat`을 브라우저에서 시각적으로 확인하지 않은 상태로 발표를 맞을 위험 | TestClient로는 검증됐으나, 발표 전 로컬에서 직접 열어서 확인 필요 |
 | PR #6, #7이 리뷰 없이 오래 열려 있을 위험 | 셀프 머지 금지 규칙 유지, 발표 전 최소 1회 상호 리뷰 후 병합 |
 | main 브랜치 보호 규칙이 해제돼 있어 실수로 깨진 코드가 바로 반영될 위험 | 각자 로컬에서 pre-commit(ruff/pyrefly) 통과 후 푸시하는 관행 유지 |
 | KBO 에이전트가 `Agent(ABC)` 공통 베이스를 상속하지 않아, 다른 도구와 인터페이스가 갈라질 위험 | 팀 논의로 통일할지, 도구별 자율성을 유지할지 결정 필요(Open Question) |
@@ -155,7 +167,7 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 ## 15. Open Questions
 
 - business-agent의 실제 주제·범위·담당자는? (현재 스캐폴딩만 존재)
-- 채팅 UI의 `/chat`을 어떤 백엔드(KBO 에이전트/다른 도구/신규 라우팅 계층)에 연결할지, 담당은 누구인지?
+- `/chat`이 지금은 `FileConverterAgent`(file-converter 담당 범위) 하나에만 연결돼 있음 — KBO 에이전트 등 다른 도구도 채팅으로 쓸 수 있게 할지, 한다면 어떻게 여러 도구를 하나의 `/chat`에서 고를지(라우팅 계층 재검토?)
 - "뉴스봇" 대체 프로젝트명을 새로 정할지, 아니면 "도구 모음" 형태로 계속 갈지?
 - `architecture.md`(v0.1 카테고리 라우팅 설계)를 이 버전에 맞게 다시 쓸지, 폐기할지?
 - KBO 에이전트를 공통 `Agent(ABC)` 베이스로 리팩터링할지, 독립 구현을 유지할지?
@@ -171,7 +183,7 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 
 - [ ] file-converter, KBO 에이전트가 실제 데이터로 동작하는 것을 시연한다(둘 다 실제 API 키 기준 검증 완료 — 배포/발표 환경에서 재확인 필요)
 - [ ] business-agent의 범위가 확정되고 최소 기능이 구현된다
-- [ ] 채팅 UI가 최소 하나의 실제 백엔드에 연결된다
+- [x] 채팅 UI가 최소 하나의 실제 백엔드에 연결된다 (`POST /chat` → `FileConverterAgent`, TestClient로 검증됨 — 브라우저 육안 확인은 아직)
 - [ ] 필수요건 6종(엔드포인트 2개↑·프롬프트템플릿·Pydantic구조화·SSE스트리밍·LangSmith·`.env`)이 팀 전체 기준으로 모두 반영된다
 - [ ] PR #6, #7이 리뷰를 거쳐 main에 병합된다
 - [ ] 본 PRD와 팀 문서([navigation.md](navigation.md), [architecture.md](architecture.md), [presentation.md](presentation.md))가 실제 코드와 일치하는 상태로 정리된다(현재 architecture.md/navigation.md는 v0.1 기준으로 남아있어 갱신 필요)

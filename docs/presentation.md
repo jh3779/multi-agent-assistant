@@ -29,11 +29,11 @@
 
 | 요소 | 상태 | 설명 |
 |---|:---:|---|
-| ① 프롬프트 전략 | ✅ 완료 | `FileConverterAgent`(`app/llms/file_converter_agent.py`)가 시스템 프롬프트(`_SYSTEM_PROMPT`)를 `ChatPromptTemplate`으로 구성해 하드코딩 없이 관리. 다만 이건 채팅 UI의 `/chat`과는 아직 연결 안 된 별도 경로 |
-| ② 체인 구조 | ✅ 완료(부분) | `FileConverterAgent`가 팀 공용 `Agent(ABC)`(`app/llms/agent.py`)를 실제로 상속한 첫 구현체 — 프롬프트→도구 선택(Function Calling)→도구 실행→도구 결과 검증(`validate_tool_result`)→구조화 답변→답변 검증(`answer_validation`) 전체 파이프라인을 갖춤. `POST /chat`이 쓰던 목(mock) 체인은 폐기됨 |
+| ① 프롬프트 전략 | ✅ 완료 | `FileConverterAgent`(`app/llms/file_converter_agent.py`)가 시스템 프롬프트(`_SYSTEM_PROMPT`)를 `ChatPromptTemplate`으로 구성해 하드코딩 없이 관리. `POST /chat`(`app/routers/chat.py`)이 이 에이전트를 실제로 호출함 |
+| ② 체인 구조 | ✅ 완료 | `FileConverterAgent`가 팀 공용 `Agent(ABC)`(`app/llms/agent.py`)를 실제로 상속한 첫 구현체 — 프롬프트→도구 선택(Function Calling)→도구 실행→도구 결과 검증(`validate_tool_result`)→구조화 답변→답변 검증(`answer_validation`) 전체 파이프라인을 갖춤. 목(mock)이 쓰던 가짜 체인은 폐기되고 `POST /chat`이 이 진짜 체인을 씀 |
 | ③ 도구 목록 | ✅ 완료 | `file_converter`를 두 형태로 노출 — HTTP API(`POST /tools/file-converter/convert`)와 LangChain `@tool` 데코레이터 함수(`file_converter`, `FileConverterAgent`가 `bind_tools()`로 실제 호출) |
 | ④ 상태 관리 | ✅ 완료(의도적으로 무상태) | 멀티턴 대화 **미지원으로 확정**(DEC-001) — 매 요청이 이전 맥락과 무관한 독립 처리. 세션/로그인도 없음 |
-| ⑤ 스트리밍 | ⚠️ 부분 | `FileConverterAgent.astream()`이 `AsyncIterator[str]`을 반환하도록 인터페이스는 갖춰져 있음(현재는 완성된 요약을 한 청크로 yield). 다만 HTTP SSE 엔드포인트로는 아직 안 열려있어 실제 스트리밍 데모는 불가 — 목(mock)이 하던 `/chat` SSE는 폐기됨 |
+| ⑤ 스트리밍 | ✅ 완료 | `app/routers/chat.py`의 `POST /chat`이 `FileConverterAgent.astream()`을 실제 SSE(`text/event-stream`)로 노출. `tool_start`/`tool_end`/`answer_chunk`/`done` 이벤트 계약을 목(mock)과 동일하게 맞춰서 `chat.js` 수정 없이 그대로 붙음. 다만 `astream()`이 완성된 요약을 한 번에 yield하는 구조라, 토큰 단위 실시간 스트리밍은 아님(구조화 출력의 제약 — 3번 항목 참고) |
 | ⑥ 비용·지연 | 부분 실측 | pandoc 자체는 로컬 바이너리 변환이라 비용 없음. `FileConverterAgent`는 `gpt-4o-mini` 호출 1~2회(도구 판단 1회 + 구조화 출력 1회) — 정확한 토큰/비용 실측은 아직 미착수 |
 | LangSmith 트레이스 | ✅ 사실상 완료 | `.env`에 `LANGCHAIN_TRACING_V2=true`+`LANGCHAIN_API_KEY`+`LANGCHAIN_PROJECT`가 설정돼 있어, `FileConverterAgent`가 만든 모든 `ChatOpenAI` 호출이 별도 코드 없이 자동으로 LangSmith에 트레이스됨(이번 세션에 실행한 라이브 테스트들도 전부 트레이스 남았을 것) |
 
@@ -57,12 +57,13 @@
 
 **채팅 UI 구성**
 - `app/static/index.html`·`styles.css`·`chat.js` — 다크모드(Vercel 스타일), 텍스트 질문 + SSE 스트리밍, 파일 드래그·업로드·변환, 도구 호출 상태 실시간 표시
-- (폐기) `app/chat_mock.py` — 진짜 백엔드 나오기 전까지 프론트를 검증하던 목 SSE 엔드포인트. 진짜 백엔드가 아직 없어 현재 `/chat`은 404 — 텍스트 메시지 전송은 당장 동작하지 않음
+- (폐기 후 대체) `app/chat_mock.py` — 진짜 백엔드 나오기 전까지 프론트를 검증하던 목 SSE 엔드포인트. 폐기 후 `app/routers/chat.py`가 `FileConverterAgent`를 실제로 호출하는 진짜 백엔드로 그 자리를 대체함(이벤트 계약은 동일하게 유지해 `chat.js`는 수정 없음)
+- 단, 채팅 텍스트 입력창은 파일 경로를 같이 보내지 않음 — 파일 변환은 여전히 별도 드래그앤드롭 플로우(`POST /tools/file-converter/convert`)로 처리되고, `/chat`은 주로 "이 도구가 뭘 하는지" 같은 일반 질문에 실제 LLM이 답하는 용도
 - `polish` 디자인 검토로 실결함 6개 수정: 동시 전송 방지, 포맷 로딩 경쟁 상태, 이모지 아이콘→SVG 교체, `<select>` 다크테마 적용, 브라우저 표면(선택 영역·스크롤바) 테마, 전역 포커스 링
 
 **엔드포인트 (필수요건 6종 중 "2개 이상")**
 - `POST /tools/file-converter/convert`, `GET /tools/file-converter/formats` — 실제 동작
-- `POST /chat` — 목(mock) 폐기로 현재 미구현(404), 실제 백엔드 연결 필요
+- `POST /chat` — `FileConverterAgent` 기반 실제 SSE 스트리밍 엔드포인트로 동작(TestClient로 tool-call/no-tool-call 두 경로 모두 라이브 검증됨). 브라우저에서의 시각적 확인은 아직 안 함
 - `GET /` — 채팅 UI 정적 페이지
 
 **현재까지 진행 상태**
@@ -89,5 +90,7 @@
 **작업 순서**: 팀원이 공통 베이스 클래스(`Agent`, `BaseTool`)를 만들고, 그 위에서 각자 자기 Tool을 독립적으로 구현 → FastAPI 앱(`app/main.py`)에 라우터/도구로 연결하는 방식. 카테고리별로 서비스를 통째로 나누는 방식(뉴스봇 시절 결정)도, Main LLM이 전부 오케스트레이션하는 방식도 둘 다 기각하고, 지금은 "각자 도구 + 필요하면 나중에 라우팅 계층 추가"로 정리됨.
 
 **남은 리스크(발표 전 팀이 정해야 할 것)**
-- 필수요건 6종 중 프롬프트 템플릿·Pydantic 구조화 출력·LangSmith 트레이스, 이 3개는 실제 LLM 호출이 있어야 채워지는데 아직 아무도 안 만들고 있음 — 발표 전까지 누군가 최소 하나의 진짜 LLM Tool을 만들어야 체크리스트 완주 가능
-- 채팅 UI가 호출할 진짜 백엔드가 없음 — 목(`app/chat_mock.py`)마저 폐기해서 현재 `/chat`은 404, 텍스트 메시지 데모는 실제 LLM Tool이 `/chat`으로 연결되기 전까진 불가능
+- `POST /chat`을 TestClient로만 검증했고 실제 브라우저에서 시각적으로 확인은 안 함 — 발표 전 로컬에서 직접 열어서 확인 필요
+- 채팅 텍스트로는 파일 경로를 못 넘기므로, `/chat`을 통한 "자연어로 파일 변환 요청" 데모는 안 됨(파일 변환은 여전히 드래그앤드롭 전용) — 발표 시나리오에서 이 경계를 명확히 설명해야 오해가 없음
+- business-agent 범위·담당 미정 — 발표 전 완성 불투명
+- PR #6, #7 리뷰·병합 일정 미정
