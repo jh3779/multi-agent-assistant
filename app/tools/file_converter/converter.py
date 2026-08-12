@@ -40,8 +40,17 @@ _OUTPUT_FORMATS = {
 
 SUPPORTED_FORMATS = sorted(set(_INPUT_FORMATS) | set(_OUTPUT_FORMATS))
 
+# pandoc이 멈추거나 비정상적으로 오래 걸리는 파일(악의적이거나 그냥 거대한 파일)에
+# 대비한 상한선. asyncio.wait_for는 "기다리는 걸 포기"할 뿐 백그라운드 스레드 자체를
+# 강제 종료하진 못하지만, 최소한 호출자가 무한정 멈춰있진 않게 해준다.
+CONVERT_TIMEOUT_SECONDS = 30
+
 
 class UnsupportedFormatError(ValueError):
+    pass
+
+
+class ConversionTimeoutError(RuntimeError):
     pass
 
 
@@ -60,9 +69,22 @@ async def convert(content: bytes, source_format: str, target_format: str) -> byt
     # pandoc 호출은 subprocess를 기다리는 blocking 작업 — 그대로 부르면 변환하는
     # 동안 FastAPI의 이벤트 루프가 막혀서 같은 프로세스의 다른 요청(SSE 스트리밍 등)도
     # 같이 멈춤. 별도 스레드로 돌려서 이벤트 루프는 계속 다른 일을 하게 함.
-    return await asyncio.to_thread(
-        _convert_sync, content, src_ext, src_pandoc_format, dst_ext, dst_pandoc_format
-    )
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                _convert_sync,
+                content,
+                src_ext,
+                src_pandoc_format,
+                dst_ext,
+                dst_pandoc_format,
+            ),
+            timeout=CONVERT_TIMEOUT_SECONDS,
+        )
+    except TimeoutError as exc:
+        raise ConversionTimeoutError(
+            f"변환이 {CONVERT_TIMEOUT_SECONDS}초 안에 끝나지 않았습니다: {source_format} -> {target_format}"
+        ) from exc
 
 
 def _convert_sync(

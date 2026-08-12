@@ -6,6 +6,7 @@
 # 다루는 범위 좁은 에이전트다 — 다른 Tool이 생기면 그때 합치거나 라우팅을 얹으면 됨.
 from langchain_core.messages import ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.tools import ToolException
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
@@ -36,7 +37,7 @@ class FileConversionAnswer(BaseModel):
 
 async def ask(
     question: str, file_path: str | None = None
-) -> tuple[FileConversionAnswer, bytes | None]:
+) -> tuple[FileConversionAnswer, list[bytes]]:
     full_question = (
         question
         if file_path is None
@@ -44,28 +45,35 @@ async def ask(
     )
 
     tool = FileConverterTool()
-    # os.environ에 OPENAI_API_KEY를 심어주는 load_dotenv()가 앱 어디에도 없어서,
-    # pydantic-settings가 이미 읽어둔 settings에서 직접 키를 넘겨준다(더미 키로만
-    # 검증됐던 이유 — 실제 키로는 인증 에러가 났었음).
+    # ChatOpenAI는 기본적으로 os.environ의 OPENAI_API_KEY를 읽지만, settings에서
+    # 명시적으로 넘겨 .env 로딩 경로에 덜 의존하게 한다(이중 안전장치).
     model = ChatOpenAI(
         model="gpt-4o-mini", temperature=0, api_key=settings.openai_api_key
     )
     messages = _PROMPT.format_messages(question=full_question)
 
-    # 1단계: 도구를 쓸지 말지 LLM이 스스로 판단(Function Calling)
+    # 1단계: 도구를 쓸지 말지, 몇 번 쓸지 LLM이 스스로 판단(Function Calling)
     response = await model.bind_tools([tool]).ainvoke(messages)
 
     tool_calls = getattr(response, "tool_calls", None) or []
     if not tool_calls:
-        return FileConversionAnswer(used_tool=False, summary=response.content), None
+        return FileConversionAnswer(used_tool=False, summary=response.content), []
 
-    # 2단계: 실제로 도구 실행 — 여기가 이전엔 아무도 안 지나가 본 경로
-    call = tool_calls[0]
-    content, artifact = await tool._arun(**call["args"])
-
+    # 2단계: 도구를 실제로 실행 — LLM이 tool_calls를 여러 개 반환할 수 있고,
+    # OpenAI는 각 tool_call마다 대응하는 ToolMessage가 있어야 다음 턴을 받아준다.
+    # 하나만 처리하고 나머지를 빼먹으면 다음 요청에서 400 에러가 난다.
     messages.append(response)
-    messages.append(ToolMessage(content=content, tool_call_id=call["id"]))
+    artifacts: list[bytes] = []
+    for call in tool_calls:
+        try:
+            content, artifact = await tool._arun(**call["args"])
+        except ToolException as exc:
+            content = f"변환 실패: {exc}"
+            artifact = None
+        messages.append(ToolMessage(content=content, tool_call_id=call["id"]))
+        if artifact is not None:
+            artifacts.append(artifact)
 
-    # 3단계: 도구 결과를 반영해 Pydantic 구조화 출력으로 최종 답변 생성
+    # 3단계: 도구 결과(성공/실패 전부)를 반영해 Pydantic 구조화 출력으로 최종 답변 생성
     result = await model.with_structured_output(FileConversionAnswer).ainvoke(messages)
-    return result, artifact
+    return result, artifacts

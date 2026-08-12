@@ -3,9 +3,13 @@ from fastapi.responses import Response
 
 from app.tools.file_converter.converter import (
     SUPPORTED_FORMATS,
+    ConversionTimeoutError,
     UnsupportedFormatError,
     convert,
 )
+
+# 업로드 크기 상한 — 없으면 요청 하나가 서버 메모리를 무제한으로 잡아먹을 수 있음.
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB
 
 # 이 라우터는 "사람이 쓰는 채팅 UI"가 fetch()로 직접 호출하는 HTTP API 경로다.
 # LLM이 도구로 호출하는 경로는 별도로 tool.py(FileConverterTool)에 있음 —
@@ -42,10 +46,17 @@ async def convert_file(file: UploadFile, target_format: str = Form(...)) -> Resp
     source_format = filename.rsplit(".", 1)[-1]
 
     content = await file.read()
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            413, f"파일이 너무 큽니다 (최대 {_MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"
+        )
+
     try:
         converted = await convert(content, source_format, target_format)
     except UnsupportedFormatError as exc:
         raise HTTPException(400, str(exc)) from exc
+    except ConversionTimeoutError as exc:
+        raise HTTPException(504, str(exc)) from exc
 
     dst_ext = target_format.lower().lstrip(".")
     media_type = _MEDIA_TYPES.get(dst_ext, "application/octet-stream")
