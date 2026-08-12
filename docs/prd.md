@@ -46,7 +46,7 @@
 
 1. **독립성** — 팀원 각자 자기 도구를 독립적으로 설계·구현·배포할 수 있다(Main Agent 의존 없음, 한 사람이 막히면 다른 사람도 막히는 구조를 피함).
 2. **최소한의 공통 기반** — `Agent(ABC)`/`BaseTool` 베이스 클래스로 도구 간 최소 일관성만 확보하고, 그 이상은 강제하지 않는다.
-3. **실동작 검증** — 각 도구는 목(mock)이 아니라 실제 LLM 호출로 end-to-end 검증한다(예: `file_converter_agent.ask()`, `KBOAgent.ainvoke()` 모두 실제 API 키로 검증됨).
+3. **실동작 검증** — 각 도구는 목(mock)이 아니라 실제 LLM 호출로 end-to-end 검증한다(예: `FileConverterAgent.astream()`, `KBOAgent.ainvoke()` 모두 실제 API 키로 검증됨).
 
 ## 6. 성공 지표
 
@@ -84,7 +84,7 @@
 | FR-KBO-001 | `POST /kbo/query`가 자연어 질문을 받아 KBO 관련 답변을 반환한다 |
 | FR-KBO-002 | 시의성 정보(순위/일정/결과 등)가 필요하면 에이전트가 자율적으로 웹 검색(Tavily) 도구를 호출해 근거를 수집한다 |
 | FR-KBO-003 | 초안 답변을 별도 검증(validation) LLM 호출로 사실관계·날짜 일관성을 점검하고, 불합격 시 근거에 기반해 자동으로 다시 작성(correction)한다 |
-| FR-BASE-001 | 팀 공용 `Agent(ABC)`가 `create_system_prompt`/`create_human_prompt`/`create_workflow`/`validate_tool_result`/`answer_validation`/`astream` 추상 메서드를 정의해, 각 도구가 최소한의 동일한 인터페이스를 따르도록 한다(단, 현재 KBO 에이전트는 이 베이스를 상속하지 않고 독립 클래스로 구현되어 있음 — 통일 여부는 Open Question) |
+| FR-BASE-001 | 팀 공용 `Agent(ABC)`가 `create_system_prompt`/`create_human_prompt`/`create_workflow`/`validate_tool_result`/`answer_validation`/`astream` 추상 메서드를 정의해, 각 도구가 최소한의 동일한 인터페이스를 따르도록 한다. `FileConverterAgent`가 첫 실제 구현체(`app/llms/file_converter_agent.py`) — `astream`이 `AsyncIterator[str]`만 반환할 수 있어 변환된 파일 바이트(artifact)는 반환값이 아니라 `self.memory["artifacts"]`에 담아 호출자가 실행 후 꺼내 쓰게 함. KBO 에이전트는 아직 이 베이스를 상속하지 않고 독립 클래스로 구현되어 있음 — 통일 여부는 Open Question |
 | FR-BASE-002 | 팀 공용 `BaseTool`이 `settings`(API 키 등)를 공유해, 각 도구가 설정 로딩을 중복 구현하지 않게 한다 |
 | FR-008 | API 키(OpenAI, Tavily 등)는 `.env`로 관리하고 저장소에 커밋하지 않는다 |
 

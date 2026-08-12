@@ -18,10 +18,10 @@ ALLOWED_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # "LLM이 도구로 호출하는" 경로 — 채팅 UI가 fetch()로 직접 부르는 app/routers/file_converter.py와는
-# 별개다. 이쪽은 app/llms/file_converter_agent.py의 ask()가 진짜 LLM(gpt-4o-mini)
-# 에이전트 루프 안에서 호출한다(실제 OPENAI_API_KEY로 docx/html 변환까지
-# end-to-end 검증됨). 다만 아직 HTTP 엔드포인트로는 안 열려있어 채팅 UI에서
-# 이 경로를 타진 않는다.
+# 별개다. 이쪽은 app/llms/file_converter_agent.py의 FileConverterAgent가 진짜
+# LLM(gpt-4o-mini) 에이전트 루프 안에서 호출한다(실제 OPENAI_API_KEY로 docx/html
+# 변환까지 end-to-end 검증됨). 다만 아직 HTTP 엔드포인트로는 안 열려있어 채팅
+# UI에서 이 경로를 타진 않는다.
 #
 # app/tools/base.py의 BaseTool(클래스 상속형)이 아니라 @tool 데코레이터(함수형)로
 # 선언함 — file_converter는 공용 BaseTool이 주는 settings가 필요 없어서(순수 pandoc

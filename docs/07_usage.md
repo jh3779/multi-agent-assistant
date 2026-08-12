@@ -82,17 +82,20 @@ print(message.artifact)  # 변환된 바이트
 
 ## 4. 실제 LLM 에이전트로 호출하기 (데모/실험용)
 
-`app/llms/file_converter_agent.py`의 `ask()`가 실제 OpenAI 모델이 스스로 도구 호출 여부를 판단하는 최소 에이전트다. 아직 HTTP 엔드포인트로는 안 열려있어서 코드에서 직접 호출해야 한다.
+`app/llms/file_converter_agent.py`의 `FileConverterAgent`(팀 공용 `Agent(ABC)` 구현체)가 실제 OpenAI 모델이 스스로 도구 호출 여부를 판단하는 최소 에이전트다. 아직 HTTP 엔드포인트로는 안 열려있어서 코드에서 직접 호출해야 한다.
 
 ```python
-from app.llms.file_converter_agent import ask
+from app.llms.file_converter_agent import FileConverterAgent
 
-answer, artifacts = await ask(
+agent = FileConverterAgent()
+async for chunk in agent.astream(
     "이 파일을 html로 바꿔줘",
     file_path="/path/to/allowed/dir/example.md",
-)
-print(answer.summary)       # LLM이 정리한 결과 요약
-print(len(artifacts))       # 실제 변환된 파일 바이트 목록
+):
+    print(chunk)             # LLM이 정리한 결과 요약(현재는 한 번에 전체가 옴)
+
+print(len(agent.memory["artifacts"]))       # 실제 변환된 파일 바이트 목록
+print(agent.memory["answer_validation"])    # 요약이 실제 실행 결과와 일치하는지 검증 결과
 ```
 
 `OPENAI_API_KEY`가 `.env`에 실제 값으로 채워져 있어야 동작한다.

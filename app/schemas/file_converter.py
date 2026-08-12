@@ -15,7 +15,7 @@ class FileConverterArgs(BaseModel):
 
 
 class FileConversionAnswer(BaseModel):
-    """file_converter_agent.ask()(app/llms/file_converter_agent.py)의 구조화 출력."""
+    """FileConverterAgent(app/llms/file_converter_agent.py)의 구조화 출력."""
 
     used_tool: bool = Field(description="file_converter 도구를 실제로 호출했는지")
     tool_name: str | None = Field(
