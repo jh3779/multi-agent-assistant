@@ -19,7 +19,7 @@ class WebSearchTool(BaseTool):
         query: str,
         **kwargs: Any,
     ) -> Any:
-        print(f"Searching web ({query})...\n\n")
+        print(f"\n[TOOL] Searching web: {query}")
         tavily = TavilySearch(
             tavily_api_key=self.settings.tavily_api_key,
             max_results=self.max_results,
@@ -35,7 +35,7 @@ class WebSearchTool(BaseTool):
         query: str,
         **kwargs: Any,
     ) -> Any:
-        print(f"Searching web ({query})...\n\n")
+        print(f"\n[TOOL] Searching web: {query}")
         tavily = TavilySearch(
             tavily_api_key=self.settings.tavily_api_key,
             max_results=self.max_results,
