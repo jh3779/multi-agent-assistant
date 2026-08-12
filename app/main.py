@@ -3,5 +3,6 @@ from fastapi import FastAPI
 
 from app.api.kbo import router as kbo_router
 
-app = FastAPI(title="KBO Agent API")
+app = FastAPI(title="LG CNS Project API")
+
 app.include_router(kbo_router)
