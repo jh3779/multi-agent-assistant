@@ -1,6 +1,5 @@
 import asyncio
 import json
-from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.messages import (
@@ -9,7 +8,6 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
@@ -22,6 +20,7 @@ from app.tools.web_search import WebSearchTool
 
 MODEL_NAME = "gpt-4o-mini"
 TEMPERATURE = 0
+
 MAX_TOOL_ITERATIONS = 5
 
 MAX_SEARCH_RESULTS = 5
@@ -32,11 +31,12 @@ SEARCH_DEPTH = "advanced"
 # Prompt
 # =========================================================
 
-# TODO: 시스템 프롬프트 수정하기
+# TODO: 시스템 프롬프트 고도화
 MAIN_PROMPT = """
 You are an agent specialized in KBO baseball.
 
 Your task is to:
+
 1. Understand the KBO baseball-related request.
 2. Use web search when external information is needed.
 3. Search enough information to answer accurately.
@@ -49,12 +49,14 @@ Use tools autonomously when needed.
 Answer in Korean unless otherwise requested.
 """
 
+
 VALIDATION_PROMPT = """
 You are a validator for a KBO baseball agent.
 
 Evaluate whether the draft answer correctly answers the user's question.
 
 Check:
+
 1. Whether the answer directly addresses the question.
 2. Whether factual claims are supported by the provided evidence.
 3. Whether names, dates, rankings, scores, and statistics are accurate.
@@ -73,9 +75,12 @@ Do not rewrite the answer yourself.
 
 
 # =========================================================
-# Response
+# Schema
 # =========================================================
+
 class ValidationResult(BaseModel):
+    """Validation result for a generated answer."""
+
     is_valid: bool = Field(
         description="Whether the answer is factually correct and supported."
     )
@@ -91,25 +96,24 @@ class ValidationResult(BaseModel):
 
 
 # =========================================================
-# Message
+# Message Helpers
 # =========================================================
 
 def create_messages(
     query: str,
 ) -> list[BaseMessage]:
+    """Create initial messages for the baseball agent."""
 
     return [
-        SystemMessage(
-            content=MAIN_PROMPT
-        ),
-        HumanMessage(
-            content=query
-        ),
+        SystemMessage(content=MAIN_PROMPT),
+        HumanMessage(content=query),
     ]
+
 
 def collect_evidence(
     messages: list[BaseMessage],
 ) -> str:
+    """Collect tool outputs used as evidence."""
 
     evidence = [
         message.content
@@ -119,6 +123,7 @@ def collect_evidence(
 
     return "\n\n".join(evidence)
 
+
 # =========================================================
 # Agent
 # =========================================================
@@ -127,10 +132,14 @@ class BaseballAgent:
 
     def __init__(self):
 
+        # -------------------------------------------------
+        # Tools
+        # -------------------------------------------------
+
         self.tools = [
             WebSearchTool(
                 max_results=MAX_SEARCH_RESULTS,
-                search_depth=SEARCH_DEPTH
+                search_depth=SEARCH_DEPTH,
             ),
         ]
 
@@ -139,48 +148,87 @@ class BaseballAgent:
             for tool in self.tools
         }
 
-        self.model = ChatOpenAI(            
+        # -------------------------------------------------
+        # Model
+        # -------------------------------------------------
+
+        self.model = ChatOpenAI(
             api_key=settings.openai_api_key,
             model=MODEL_NAME,
             temperature=TEMPERATURE,
         )
 
-        self.model_with_tools = (
-            self.model.bind_tools(
-                self.tools
-            )
+        # Model used for autonomous tool calling.
+        self.model_with_tools = self.model.bind_tools(
+            self.tools
         )
 
-        self.validator = (
-            self.model.with_structured_output(
-                ValidationResult
-            )
+        # Model used for structured validation.
+        self.validator = self.model.with_structured_output(
+            ValidationResult
         )
 
-        self.model_chain = RunnableLambda(
-            self._call_model
-        )
+    # =====================================================
+    # Answer Generation
+    # =====================================================
 
-
-    async def _call_model(
+    async def _generate_answer(
         self,
-        messages: list[BaseMessage],
-    ) -> list[BaseMessage]:
+        query: str,
+    ) -> tuple[str, str]:
+        """
+        Generate a draft answer.
 
-        print("\n[MODEL] Calling model...")
-        response = (
-            await self.model_with_tools.ainvoke(
+        The model may call tools multiple times.
+        Returns the draft answer and collected evidence.
+        """
+
+        messages = create_messages(query)
+
+        for _ in range(MAX_TOOL_ITERATIONS):
+
+            print("\n[MODEL] Calling model...")
+
+            response = await self.model_with_tools.ainvoke(
                 messages
             )
+
+            messages.append(response)
+
+            # Tool call이 없으면 draft 생성 완료
+            if not response.tool_calls:
+
+                answer = response.content
+                evidence = collect_evidence(messages)
+
+                print("\n[DRAFT] Generated answer:")
+                print(answer)
+
+                print("\n[EVIDENCE] Collected tool results:")
+                print(evidence)
+
+                return answer, evidence
+
+            # 여러 Tool call을 병렬 실행
+            tool_messages = await self._execute_tools(
+                response.tool_calls
+            )
+
+            messages.extend(tool_messages)
+
+        raise RuntimeError(
+            "Maximum tool iterations exceeded."
         )
 
-        return messages + [response]
-
+    # =====================================================
+    # Tool Execution
+    # =====================================================
 
     async def _execute_tool(
         self,
         tool_call: dict[str, Any],
     ) -> ToolMessage:
+        """Execute a single tool call."""
 
         tool = self.tool_map.get(
             tool_call["name"]
@@ -193,7 +241,11 @@ class BaseballAgent:
             )
 
         try:
-            print(f"\n[TOOL] Executing {tool_call['name']}...")
+            print(
+                f"\n[TOOL] Executing "
+                f"{tool_call['name']}..."
+            )
+
             result = await tool.ainvoke(
                 tool_call["args"]
             )
@@ -213,11 +265,11 @@ class BaseballAgent:
                 tool_call_id=tool_call["id"],
             )
 
-
     async def _execute_tools(
         self,
         tool_calls: list[dict[str, Any]],
     ) -> list[ToolMessage]:
+        """Execute multiple tool calls concurrently."""
 
         return list(
             await asyncio.gather(
@@ -228,6 +280,9 @@ class BaseballAgent:
             )
         )
 
+    # =====================================================
+    # Validation
+    # =====================================================
 
     async def _validate(
         self,
@@ -235,8 +290,9 @@ class BaseballAgent:
         answer: str,
         evidence: str,
     ) -> ValidationResult:
+        """Validate the draft answer using collected evidence."""
 
-        print("\n[VALIDATION] Validating response...")
+        print("\n[VALIDATION] Validating answer...")
 
         messages = [
             SystemMessage(
@@ -244,21 +300,25 @@ class BaseballAgent:
             ),
             HumanMessage(
                 content=f"""
-    Question:
-    {query}
+Question:
+{query}
 
-    Draft answer:
-    {answer}
+Draft answer:
+{answer}
 
-    Evidence:
-    {evidence}
-    """
+Evidence:
+{evidence}
+"""
             ),
         ]
 
         return await self.validator.ainvoke(
             messages
         )
+
+    # =====================================================
+    # Correction
+    # =====================================================
 
     async def _correct(
         self,
@@ -267,8 +327,9 @@ class BaseballAgent:
         evidence: str,
         validation: ValidationResult,
     ) -> str:
+        """Correct an invalid answer using validation feedback."""
 
-        print("\n[CORRECTION] Correcting response...")
+        print("\n[CORRECTION] Correcting answer...")
 
         messages = [
             SystemMessage(
@@ -276,24 +337,24 @@ class BaseballAgent:
             ),
             HumanMessage(
                 content=f"""
-    Original question:
-    {query}
+Original question:
+{query}
 
-    Previous answer:
-    {answer}
+Previous answer:
+{answer}
 
-    Validation feedback:
-    {validation.reason}
+Validation feedback:
+{validation.reason}
 
-    Correction instructions:
-    {validation.correction}
+Correction instructions:
+{validation.correction}
 
-    Evidence:
-    {evidence}
+Evidence:
+{evidence}
 
-    Rewrite the answer so that it is accurate
-    and supported by the evidence.
-    """
+Rewrite the answer so that it is accurate
+and supported by the evidence.
+"""
             ),
         ]
 
@@ -302,99 +363,76 @@ class BaseballAgent:
         )
 
         return response.content
-    
+
+    # =====================================================
+    # Public Interface
+    # =====================================================
 
     async def ainvoke(
         self,
         query: str,
     ) -> str:
+        """
+        Generate, validate, and if necessary correct
+        the final answer.
+        """
 
-        messages = create_messages(query)
-
-        for _ in range(MAX_TOOL_ITERATIONS):
-            messages = (
-                await self.model_chain.ainvoke(
-                    messages
-                )
-            )
-
-            last_message = messages[-1]
-
-            # Tool call 없음 → 최종 응답
-            if not last_message.tool_calls:
-
-                answer = last_message.content
-                print("\n[DRAFT] Generated response:")
-                print(answer)
-
-                evidence = collect_evidence(messages)
-                print("\n[EVIDENCE] Collected tool results:")
-                print(evidence)
-
-                validation = await self._validate(
-                    query=query,
-                    answer=answer,
-                    evidence=evidence,
-                )
-
-                if validation.is_valid:
-                    print("\n[VALIDATION] Passed")
-                    return answer
-
-                print("\n[VALIDATION] Failed")
-                print(f"[VALIDATION] Reason: {validation.reason}")
-                print(f"[VALIDATION] Correction: {validation.correction}")
-
-                corrected_answer = await self._correct(
-                    query=query,
-                    answer=answer,
-                    evidence=evidence,
-                    validation=validation,
-                )
-                print("\n[CORRECTION] Corrected response:")
-                print(corrected_answer)
-
-                return corrected_answer
-
-            # Tool 병렬 실행
-            tool_messages = (
-                await self._execute_tools(
-                    last_message.tool_calls
-                )
-            )
-
-            messages.extend(tool_messages)
-
-        raise RuntimeError(
-            "Maximum tool iterations exceeded."
-        )
-
-
-    async def astream(
-        self,
-        query: str,
-    ) -> AsyncIterator[str]:
-
-        final_answer = await self.ainvoke(
+        # 1. Generate draft answer
+        answer, evidence = await self._generate_answer(
             query
         )
 
-        for chunk in final_answer.split():
-            yield chunk + " "
+        # 2. Validate draft answer
+        validation = await self._validate(
+            query=query,
+            answer=answer,
+            evidence=evidence,
+        )
 
+        # 3. Return immediately if validation passes
+        if validation.is_valid:
+            print("\n[VALIDATION] Passed")
+            return answer
+
+        print("\n[VALIDATION] Failed")
+        print(
+            f"[VALIDATION] Reason: "
+            f"{validation.reason}"
+        )
+        print(
+            f"[VALIDATION] Correction: "
+            f"{validation.correction}"
+        )
+
+        # 4. Correct invalid answer
+        corrected_answer = await self._correct(
+            query=query,
+            answer=answer,
+            evidence=evidence,
+            validation=validation,
+        )
+
+        print("\n[CORRECTION] Corrected answer:")
+        print(corrected_answer)
+
+        return corrected_answer
+
+
+# =========================================================
+# Test
+# =========================================================
 
 async def main():
+
     agent = BaseballAgent()
 
-    async for chunk in agent.astream(
+    result = await agent.ainvoke(
         "26년 8월 11일 현재 KBO 순위를 찾고, "
         "그 순위에서 1위인 구단에 대해 설명해줘."
-    ):
-        print(
-            chunk,
-            end="",
-            flush=True,
-        )
+    )
+
+    print("\n[FINAL] Answer:")
+    print(result)
 
 
 if __name__ == "__main__":
