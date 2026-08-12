@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from app.setting import settings
 from app.tools.date_time import DateTimeTool
 from app.tools.web_search import WebSearchTool
+from app.schemas.kbo import ValidationResult
 
 # =========================================================
 # Config
@@ -162,23 +163,6 @@ Do not rewrite the draft answer yourself.
 Do not introduce new factual information unless it is directly supported by the provided evidence.
 
 """
-
-
-# =========================================================
-# Schema
-# =========================================================
-
-
-class ValidationResult(BaseModel):
-    """Validation result for a generated answer."""
-
-    is_valid: bool = Field(
-        description="Whether the answer is factually correct and supported."
-    )
-    reason: str = Field(description="Reason for the validation result.")
-    correction: str | None = Field(
-        default=None, description="Correction instructions if the answer is invalid."
-    )
 
 
 # =========================================================
