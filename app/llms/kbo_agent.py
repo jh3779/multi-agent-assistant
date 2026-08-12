@@ -3,8 +3,6 @@ import json
 from typing import Any
 from collections.abc import AsyncIterator
 
-from pydantic import BaseModel
-
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import (
     BaseMessage,
@@ -50,16 +48,6 @@ Use tools autonomously when needed.
 
 Answer in Korean unless otherwise requested.
 """
-
-
-# =========================================================
-# Response
-# =========================================================
-
-# TODO: 팀원과 최종 결과 맞추기
-class BaseballAgentResponse(BaseModel):
-    query: str
-    answer: str
 
 
 # =========================================================
@@ -187,16 +175,11 @@ class BaseballAgent:
     async def ainvoke(
         self,
         query: str,
-    ) -> BaseballAgentResponse:
+    ) -> str:
 
-        messages = create_messages(
-            query
-        )
+        messages = create_messages(query)
 
-        for _ in range(
-            MAX_TOOL_ITERATIONS
-        ):
-            # LLM
+        for _ in range(MAX_TOOL_ITERATIONS):
             messages = (
                 await self.model_chain.ainvoke(
                     messages
@@ -207,10 +190,7 @@ class BaseballAgent:
 
             # Tool call 없음 → 최종 응답
             if not last_message.tool_calls:
-                return BaseballAgentResponse(
-                    query=query,
-                    answer=last_message.content,
-                )
+                return last_message.content
 
             # Tool 병렬 실행
             tool_messages = (
@@ -219,9 +199,7 @@ class BaseballAgent:
                 )
             )
 
-            messages.extend(
-                tool_messages
-            )
+            messages.extend(tool_messages)
 
         raise RuntimeError(
             "Maximum tool iterations exceeded."
