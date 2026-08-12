@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from typing import Any, ClassVar
+from typing import Any
 
 from langchain_core.prompts import (
     HumanMessagePromptTemplate,
@@ -9,7 +9,7 @@ from langchain_core.prompts import (
 from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
-from app.setting import settings, Settings
+from app.setting import settings
 
 
 class Agent(ABC):
