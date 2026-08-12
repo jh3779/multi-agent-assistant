@@ -31,7 +31,7 @@
 |---|:---:|---|
 | ① 프롬프트 전략 | ⚠️ 미착수 | file-converter는 pandoc만 쓰는 순수 변환 도구라 프롬프트가 없음. 채팅 API(`/chat`)도 지금은 목(mock)이라 실제 프롬프트 없음 — **팀 전체에서 아직 아무도 안 채운 항목** |
 | ② 체인 구조 | ⚠️ 목(mock)만 존재 | `POST /chat`이 키워드 매칭으로 tech/code/general 중 하나를 "호출한 척"하고 정해진 문장을 스트리밍 — 진짜 LLM 체인 아님, 프론트 개발용 자리표시자 |
-| ③ 도구 목록 | ✅ 완료 | `file_converter`를 두 형태로 노출 — HTTP API(`POST /tools/file-converter/convert`)와 LangChain `BaseTool`(`FileConverterTool`, 나중에 진짜 Main LLM이 생기면 그대로 bind 가능) |
+| ③ 도구 목록 | ✅ 완료 | `file_converter`를 두 형태로 노출 — HTTP API(`POST /tools/file-converter/convert`)와 LangChain `@tool` 데코레이터 함수(`file_converter`, 나중에 진짜 Main LLM이 생기면 그대로 `bind_tools()`에 넘기면 됨) |
 | ④ 상태 관리 | ✅ 완료(의도적으로 무상태) | 멀티턴 대화 **미지원으로 확정**(DEC-001) — 매 요청이 이전 맥락과 무관한 독립 처리. 세션/로그인도 없음 |
 | ⑤ 스트리밍 | ✅ 완료(목 기준) | `/chat`이 SSE로 `tool_start`/`tool_end`/`answer_chunk`/`done` 이벤트를 스트리밍 — 프론트(`chat.js`)가 실시간으로 받아 도구 상태·답변을 렌더링. 진짜 LLM 연결되면 엔드포인트 계약 그대로 재사용 가능 |
 | ⑥ 비용·지연 | N/A | pandoc은 로컬 바이너리 변환이라 OpenAI 비용 없음. LLM 붙는 부분은 다른 담당자가 실측 필요 |
@@ -43,7 +43,7 @@
 **도구 구성 — file-converter**
 - `app/tools/file_converter/converter.py` — pandoc 기반 변환 로직. 지원 포맷: docx, html, md, odt, pptx, epub, rst, rtf, txt (**PDF 미지원** — pandoc이 PDF를 입력으로 못 읽고, 출력엔 별도 LaTeX 엔진 필요해서 스코프 제외)
 - `app/tools/file_converter/router.py` — FastAPI HTTP API(`/convert`, `/formats`)
-- `app/tools/file_converter/tool.py` — `app/tools/base.py`의 `BaseTool`(LangChain) 상속한 `FileConverterTool`. `response_format="content_and_artifact"`로 LLM에게 줄 텍스트 요약과 실제 변환 바이트를 분리 반환
+- `app/tools/file_converter/tool.py` — LangChain `@tool` 데코레이터로 선언한 `file_converter` 함수. `response_format="content_and_artifact"`로 LLM에게 줄 텍스트 요약과 실제 변환 바이트를 분리 반환
 - **버그 발견·수정 스토리(발표 소재로 좋음)**: docx→html 변환 시 한글이 깨지는 문제 발견 → 원인은 pandoc이 html 출력 시 `<head>` 없는 "조각(fragment)"만 내보내서 `<meta charset="utf-8">` 선언이 아예 없었던 것 → `--standalone` 옵션으로 완전한 문서를 만들게 해서 해결. 전체 9개 포맷을 한글/중국어/일본어/악센트 문자로 왕복 테스트해서 재검증
 
 **프롬프트 템플릿**

@@ -12,7 +12,7 @@ from app.tools.file_converter.converter import (
 _MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB
 
 # 이 라우터는 "사람이 쓰는 채팅 UI"가 fetch()로 직접 호출하는 HTTP API 경로다.
-# LLM이 도구로 호출하는 경로는 별도로 tool.py(FileConverterTool)에 있음 —
+# LLM이 도구로 호출하는 경로는 별도로 tool.py(@tool 데코레이터 함수 file_converter)에 있음 —
 # 두 소비자의 호출 방식이 달라서(HTTP 요청 vs 함수 호출 스키마) 나눠뒀고,
 # 실제 변환 로직(converter.convert)은 하나만 두고 공유한다.
 router = APIRouter(prefix="/tools/file-converter", tags=["file-converter"])

@@ -63,17 +63,21 @@ from app.tools.file_converter.converter import convert
 converted_bytes = await convert(원본_bytes, "docx", "html")
 ```
 
-LLM이 Function Calling으로 이 도구를 호출하게 하려면 `FileConverterTool`을 다른 LangChain 도구처럼 `bind_tools()`에 넘기면 된다. 단, `file_path` 인자는 **`app/tools/file_converter/tool.py`의 `ALLOWED_DIR`(시스템 임시 디렉터리 하위) 안에 있는 파일만 허용**한다 — 그 밖의 경로는 보안상 거부된다.
+LLM이 Function Calling으로 이 도구를 호출하게 하려면 `file_converter`(`@tool` 데코레이터로 선언된 함수)를 다른 LangChain 도구처럼 `bind_tools()`에 넘기면 된다. 단, `file_path` 인자는 **`app/tools/file_converter/tool.py`의 `ALLOWED_DIR`(시스템 임시 디렉터리 하위) 안에 있는 파일만 허용**한다 — 그 밖의 경로는 보안상 거부된다.
 
 ```python
-from app.tools.file_converter.tool import FileConverterTool, ALLOWED_DIR
+from app.tools.file_converter.tool import file_converter, ALLOWED_DIR
 
-tool = FileConverterTool()
 # 변환할 파일을 먼저 ALLOWED_DIR 안에 둬야 함
 target_path = ALLOWED_DIR / "example.md"
 target_path.write_bytes(원본_bytes)
 
-content, artifact_bytes = await tool._arun(str(target_path), "html")
+# tool_call 형태로 넘기면 content(요약)/artifact(변환 바이트)가 담긴 ToolMessage가 나옴
+message = await file_converter.ainvoke(
+    {"name": "file_converter", "args": {"file_path": str(target_path), "target_format": "html"}, "id": "call_1", "type": "tool_call"}
+)
+print(message.content)   # 요약 텍스트
+print(message.artifact)  # 변환된 바이트
 ```
 
 ## 4. 실제 LLM 에이전트로 호출하기 (데모/실험용)

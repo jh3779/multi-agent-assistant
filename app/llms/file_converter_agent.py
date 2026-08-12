@@ -1,4 +1,4 @@
-# FileConverterTool을 실제 LLM이 도구로 호출하는 최소 경로. 실제 OPENAI_API_KEY로
+# file_converter(@tool 데코레이터 함수)를 실제 LLM이 도구로 호출하는 최소 경로. 실제 OPENAI_API_KEY로
 # docx/html 변환이 진짜 에이전트 루프(bind_tools → 도구 실행 → 구조화 출력)를
 # 통과하는 것까지 end-to-end 검증됨. 다만 아직 HTTP 엔드포인트로 노출되지 않아서
 # (POST /chat은 별도의 목 구현) 채팅 UI에서는 이 경로를 아직 안 탄다.
@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from app.setting import settings
-from app.tools.file_converter.tool import FileConverterTool
+from app.tools.file_converter.tool import file_converter
 
 _SYSTEM_PROMPT = (
     "너는 문서 변환을 도와주는 어시스턴트다. 사용자가 파일 변환을 요청하면 "
@@ -45,7 +45,6 @@ async def ask(
         else f"{question}\n\n(첨부 파일 경로: {file_path})"
     )
 
-    tool = FileConverterTool()
     # ChatOpenAI는 기본적으로 os.environ의 OPENAI_API_KEY를 읽지만, settings에서
     # 명시적으로 넘겨 .env 로딩 경로에 덜 의존하게 한다(이중 안전장치).
     model = ChatOpenAI(
@@ -54,7 +53,7 @@ async def ask(
     messages = _PROMPT.format_messages(question=full_question)
 
     # 1단계: 도구를 쓸지 말지, 몇 번 쓸지 LLM이 스스로 판단(Function Calling)
-    response = await model.bind_tools([tool]).ainvoke(messages)
+    response = await model.bind_tools([file_converter]).ainvoke(messages)
 
     tool_calls = getattr(response, "tool_calls", None) or []
     if not tool_calls:
@@ -63,15 +62,19 @@ async def ask(
     # 2단계: 도구를 실제로 실행 — LLM이 tool_calls를 여러 개 반환할 수 있고,
     # OpenAI는 각 tool_call마다 대응하는 ToolMessage가 있어야 다음 턴을 받아준다.
     # 하나만 처리하고 나머지를 빼먹으면 다음 요청에서 400 에러가 난다.
+    # file_converter.ainvoke(call)에 tool_call 딕셔너리를 통째로 넘기면
+    # tool_call_id까지 채워진 ToolMessage(content/artifact 포함)가 바로 나온다.
     messages.append(response)
     artifacts: list[bytes] = []
     for call in tool_calls:
         try:
-            content, artifact = await tool._arun(**call["args"])
+            tool_message = await file_converter.ainvoke(call)
         except ToolException as exc:
-            content = f"변환 실패: {exc}"
-            artifact = None
-        messages.append(ToolMessage(content=content, tool_call_id=call["id"]))
+            tool_message = ToolMessage(
+                content=f"변환 실패: {exc}", tool_call_id=call["id"]
+            )
+        messages.append(tool_message)
+        artifact = getattr(tool_message, "artifact", None)
         if artifact is not None:
             artifacts.append(artifact)
 
