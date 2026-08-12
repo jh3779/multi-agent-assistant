@@ -1,14 +1,29 @@
 :root {
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
-  --color-primary: #1e293b;
+  /* 팔레트 — 아래 값들만 바꾸면 전체 화면에 반영됨. 나머지 CSS는 전부 이 변수만 참조함 */
+
+  /* 배경/전경 — 뉴트럴 그레이(zinc) 계열. 기존 slate(파란 계열)에서 색조만 교체(2026-08-12) */
+  --color-background: #18181b;
+  --color-foreground: #fafafa;
+
+  /* 표면(카드/입력창/버튼 배경) */
+  --color-primary: #27272a;
   --color-on-primary: #ffffff;
-  --color-secondary: #334155;
+  --color-secondary: #3f3f46;
+  --color-muted: #2f2f34;
+  --color-muted-foreground: #a1a1aa;
+  --color-border: #52525b;
+
+  /* 강조색(포인트 컬러 — 브랜드 점, 포커스 링, 전송 버튼, 스트리밍 커서 등). 배경 톤 교체와 무관하게 유지 */
   --color-accent: #22c55e;
-  --color-muted: #272f42;
-  --color-muted-foreground: #94a3b8;
-  --color-border: #475569;
+  --color-on-accent: #06210f; /* 강조색 배경 위에 올라가는 텍스트색(밝은 초록 위 어두운 글자) */
+
+  /* 상태색(에러) */
   --color-destructive: #ef4444;
+  --color-destructive-bg: rgba(239, 68, 68, 0.12); /* --color-destructive와 같은 색의 옅은 배경 */
+
+  /* 오버레이 배경(파일 드래그 시 전체 화면 덮개) */
+  --overlay-backdrop: rgba(24, 24, 27, 0.85); /* --color-background와 같은 색의 반투명 버전 */
+
   --radius: 10px;
   --radius-pill: 999px;
 }
@@ -37,7 +52,7 @@ body {
 
 ::selection {
   background: var(--color-accent);
-  color: #06210f;
+  color: var(--color-on-accent);
 }
 
 * {
@@ -218,7 +233,7 @@ body {
 
 .message.error {
   align-self: stretch;
-  background: rgba(239, 68, 68, 0.12);
+  background: var(--color-destructive-bg);
   border: 1px solid var(--color-destructive);
   color: var(--color-foreground);
 }
@@ -279,7 +294,7 @@ body {
 .drop-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--overlay-backdrop);
   border: 2px dashed var(--color-accent);
   display: flex;
   align-items: center;
@@ -354,7 +369,7 @@ body {
 .btn-send {
   background: var(--color-accent);
   border-color: var(--color-accent);
-  color: #06210f;
+  color: var(--color-on-accent);
 }
 
 .btn-send:disabled {

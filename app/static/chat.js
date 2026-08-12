@@ -12,6 +12,7 @@ const TOOL_LABELS = {
   tech_llm_tool: "Tech LLM Tool",
   code_llm_tool: "Code LLM Tool",
   general_llm_tool: "General LLM Tool",
+  file_converter: "파일 변환",
 };
 
 let supportedFormats = [];
