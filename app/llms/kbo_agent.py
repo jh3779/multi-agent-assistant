@@ -13,14 +13,21 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.prompts import (
+    HumanMessagePromptTemplate,
+    SystemMessagePromptTemplate,
+)
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_openai import ChatOpenAI
 
+from app.llms.agent import Agent
 from app.schemas.kbo import ValidationResult
 from app.setting import settings
 from app.tools.date_time import DateTimeTool
 from app.tools.web_search import WebSearchTool
 
 logger = logging.getLogger(__name__)
+
 
 # =========================================================
 # Config
@@ -36,30 +43,23 @@ SEARCH_DEPTH = "advanced"
 
 TIMEZONE = "Asia/Seoul"
 
+
+# =========================================================
+# Prompt
+# =========================================================
+
 PROMPT_PATH = Path(__file__).parent.parent / "resources" / "kbo.yaml"
+
 with PROMPT_PATH.open(encoding="utf-8") as f:
     PROMPTS = yaml.safe_load(f)
-    MAIN_PROMPT, VALIDATION_PROMPT = (
-        PROMPTS["main_prompt"],
-        PROMPTS["validation_prompt"],
-    )
+
+MAIN_PROMPT = PROMPTS["main_prompt"]
+VALIDATION_PROMPT = PROMPTS["validation_prompt"]
+
 
 # =========================================================
 # Message Helpers
 # =========================================================
-
-
-def create_messages(
-    query: str,
-) -> list[BaseMessage]:
-    """
-    Create initial messages for the KBO agent.
-    """
-
-    return [
-        SystemMessage(content=MAIN_PROMPT),
-        HumanMessage(content=query),
-    ]
 
 
 def collect_evidence(
@@ -81,7 +81,7 @@ def collect_evidence(
 # =========================================================
 
 
-class KBOAgent:
+class KBOAgent(Agent):
     def __init__(self):
 
         # -------------------------------------------------
@@ -93,7 +93,9 @@ class KBOAgent:
                 max_results=MAX_SEARCH_RESULTS,
                 search_depth=SEARCH_DEPTH,
             ),
-            DateTimeTool(),
+            DateTimeTool(
+                timezone=TIMEZONE,
+            ),
         ]
 
         self.tool_map = {tool.name: tool for tool in self.tools}
@@ -102,15 +104,113 @@ class KBOAgent:
         # Model
         # -------------------------------------------------
 
-        self.model = ChatOpenAI(
+        model = ChatOpenAI(
             api_key=settings.openai_api_key,
             model=MODEL_NAME,
             temperature=TEMPERATURE,
         )
 
+        super().__init__(model)
+
         self.model_with_tools = self.model.bind_tools(self.tools)
 
         self.validator = self.model.with_structured_output(ValidationResult)
+
+        # -------------------------------------------------
+        # Workflow
+        # -------------------------------------------------
+
+        self.workflow = self.create_workflow()
+
+    # =====================================================
+    # Prompt
+    # =====================================================
+
+    def create_system_prompt(
+        self,
+        *args,
+        **kwargs,
+    ) -> SystemMessagePromptTemplate:
+        """
+        Create the system prompt template.
+        """
+
+        return SystemMessagePromptTemplate.from_template(MAIN_PROMPT)
+
+    def create_human_prompt(
+        self,
+        *args,
+        **kwargs,
+    ) -> HumanMessagePromptTemplate:
+        """
+        Create the human prompt template.
+        """
+
+        return HumanMessagePromptTemplate.from_template("{question}")
+
+    # =====================================================
+    # Workflow
+    # =====================================================
+
+    def create_workflow(
+        self,
+        *args,
+        **kwargs,
+    ) -> Runnable[Any, Any]:
+        """
+        Create the execution workflow for the KBO agent.
+        """
+
+        return RunnableLambda(self._run)
+
+    async def _run(
+        self,
+        question: str,
+    ) -> str:
+        """
+        Generate, validate, and if necessary correct the final answer.
+        """
+
+        start_time = time.perf_counter()
+
+        try:
+            # 1. Generate draft answer
+            answer, evidence = await self._generate_answer(question)
+
+            # 2. Validate draft answer
+            validation = await self.answer_validation(
+                question=question,
+                answer=answer,
+                evidence=evidence,
+            )
+
+            # 3. Return if validation passes
+            if validation.is_valid:
+                logger.info("[VALIDATION] Passed")
+
+                return answer
+
+            logger.info("[VALIDATION] Failed")
+            logger.info(f"[VALIDATION] Reason: {validation.reason}")
+            logger.info(f"[VALIDATION] Correction: {validation.correction}")
+
+            # 4. Correct invalid answer
+            corrected_answer = await self._correct(
+                question=question,
+                answer=answer,
+                evidence=evidence,
+                validation=validation,
+            )
+
+            logger.info("[CORRECTION] Corrected answer:")
+            logger.info(corrected_answer)
+
+            return corrected_answer
+
+        finally:
+            elapsed_time = time.perf_counter() - start_time
+
+            logger.info(f"[TIME] Total elapsed time: {elapsed_time}")
 
     # =====================================================
     # Answer Generation
@@ -118,16 +218,22 @@ class KBOAgent:
 
     async def _generate_answer(
         self,
-        query: str,
+        question: str,
     ) -> tuple[str, str]:
         """
-        Generate a draft answer.
+        Generate a draft answer using tools when needed.
         """
 
-        messages = create_messages(query)
+        system_prompt = self.create_system_prompt()
+        human_prompt = self.create_human_prompt()
+
+        messages = [
+            system_prompt.format(),
+            human_prompt.format(question=question),
+        ]
 
         for _ in range(MAX_TOOL_ITERATIONS):
-            logger.info("\n[MODEL] Calling model...")
+            logger.info("[MODEL] Calling model...")
 
             response = await self.model_with_tools.ainvoke(messages)
 
@@ -137,10 +243,10 @@ class KBOAgent:
                 answer = response.content
                 evidence = collect_evidence(messages)
 
-                logger.info("\n[DRAFT] Generated answer:")
+                logger.info("[DRAFT] Generated answer:")
                 logger.info(answer)
 
-                logger.info("\n[EVIDENCE] Collected tool results:")
+                logger.info("[EVIDENCE] Collected tool results:")
                 logger.info(evidence)
 
                 return answer, evidence
@@ -167,12 +273,12 @@ class KBOAgent:
 
         if tool is None:
             return ToolMessage(
-                content=f"Unknown tool: {tool_call['name']}",
+                content=(f"Unknown tool: {tool_call['name']}"),
                 tool_call_id=tool_call["id"],
             )
 
         try:
-            logger.info(f"\n[TOOL] Executing {tool_call['name']}...")
+            logger.info(f"[TOOL] Executing {tool_call['name']}")
 
             result = await tool.ainvoke(tool_call["args"])
 
@@ -187,7 +293,7 @@ class KBOAgent:
 
         except (ValueError, TypeError) as e:
             return ToolMessage(
-                content=f"Tool execution error: {e}",
+                content=(f"Tool execution error: {e}"),
                 tool_call_id=tool_call["id"],
             )
 
@@ -209,24 +315,31 @@ class KBOAgent:
     # Validation
     # =====================================================
 
-    async def _validate(
+    async def answer_validation(
         self,
-        query: str,
+        question: str,
         answer: str,
-        evidence: str,
+        *args,
+        **kwargs,
     ) -> ValidationResult:
         """
-        Validate the draft answer using collected evidence.
+        Validate the draft answer using
+        collected evidence.
         """
 
-        logger.info("\n[VALIDATION] Validating answer...")
+        logger.info("[VALIDATION] Validating answer...")
+
+        evidence = kwargs.get(
+            "evidence",
+            "",
+        )
 
         messages = [
             SystemMessage(content=VALIDATION_PROMPT),
             HumanMessage(
                 content=f"""
 Question:
-{query}
+{question}
 
 Draft answer:
 {answer}
@@ -245,23 +358,24 @@ Evidence:
 
     async def _correct(
         self,
-        query: str,
+        question: str,
         answer: str,
         evidence: str,
         validation: ValidationResult,
     ) -> str:
         """
-        Correct an invalid answer using validation feedback.
+        Correct an invalid answer using
+        validation feedback.
         """
 
-        logger.info("\n[CORRECTION] Correcting answer...")
+        logger.info("[CORRECTION] Correcting answer...")
 
         messages = [
             SystemMessage(content=MAIN_PROMPT),
             HumanMessage(
                 content=f"""
 Original question:
-{query}
+{question}
 
 Previous answer:
 {answer}
@@ -291,60 +405,25 @@ and supported by the evidence.
 
     async def ainvoke(
         self,
-        query: str,
+        question: str,
     ) -> str:
         """
-        Generate, validate, and if necessary correct
-        the final answer.
+        Invoke the KBO agent workflow.
         """
 
-        start_time = time.perf_counter()
-
-        try:
-            # 1. Generate draft answer
-            answer, evidence = await self._generate_answer(query)
-
-            # 2. Validate draft answer
-            validation = await self._validate(
-                query=query,
-                answer=answer,
-                evidence=evidence,
-            )
-
-            # 3. Return immediately if validation passes
-            if validation.is_valid:
-                logger.info("\n[VALIDATION] Passed")
-                return answer
-
-            logger.info("\n[VALIDATION] Failed")
-            logger.info(f"[VALIDATION] Reason: {validation.reason}")
-            logger.info(f"[VALIDATION] Correction: {validation.correction}")
-
-            # 4. Correct invalid answer
-            corrected_answer = await self._correct(
-                query=query,
-                answer=answer,
-                evidence=evidence,
-                validation=validation,
-            )
-
-            logger.info("\n[CORRECTION] Corrected answer:")
-            logger.info(corrected_answer)
-
-            return corrected_answer
-        finally:
-            elapsed_time = time.perf_counter() - start_time
-            logger.info(f"\n[TIME] Total elapsed time: {elapsed_time:.2f}s")
+        return await self.workflow.ainvoke(question)
 
     async def astream(
         self,
-        query: str,
+        question: str,
+        *args,
+        **kwargs,
     ) -> AsyncIterator[str]:
         """
         Stream the validated final answer.
         """
 
-        final_answer = await self.ainvoke(query)
+        final_answer = await self.ainvoke(question)
 
         for chunk in final_answer.split():
             yield chunk + " "
@@ -357,14 +436,17 @@ and supported by the evidence.
 
 
 async def main():
-
     agent = KBOAgent()
 
-    print("\n[FINAL] Answer:")
+    first_chunk = True
 
     async for chunk in agent.astream(
         "KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
     ):
+        if first_chunk:
+            print("\n[FINAL] Answer:")
+            first_chunk = False
+
         print(
             chunk,
             end="",
@@ -377,7 +459,7 @@ async def main():
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        format=("%(asctime)s | %(levelname)s | %(name)s | %(message)s"),
     )
 
     asyncio.run(main())
