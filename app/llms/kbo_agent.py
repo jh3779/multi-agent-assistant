@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -335,6 +336,20 @@ and supported by the evidence.
             elapsed_time = time.perf_counter() - start_time
             logger.info(f"\n[TIME] Total elapsed time: {elapsed_time:.2f}s")
 
+    async def astream(
+        self,
+        query: str,
+    ) -> AsyncIterator[str]:
+        """
+        Stream the validated final answer.
+        """
+
+        final_answer = await self.ainvoke(query)
+
+        for chunk in final_answer.split():
+            yield chunk + " "
+            await asyncio.sleep(0.03)
+
 
 # =========================================================
 # Test
@@ -345,13 +360,24 @@ async def main():
 
     agent = KBOAgent()
 
-    result = await agent.ainvoke(
-        "KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
-    )
+    print("\n[FINAL] Answer:")
 
-    logger.info("\n[FINAL] Answer:")
-    logger.info(result)
+    async for chunk in agent.astream(
+        "KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
+    ):
+        print(
+            chunk,
+            end="",
+            flush=True,
+        )
+
+    print()
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+
     asyncio.run(main())
