@@ -1,5 +1,7 @@
 import asyncio
 import json
+import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,8 @@ from app.schemas.kbo import ValidationResult
 from app.setting import settings
 from app.tools.date_time import DateTimeTool
 from app.tools.web_search import WebSearchTool
+
+logger = logging.getLogger(__name__)
 
 # =========================================================
 # Config
@@ -122,7 +126,7 @@ class KBOAgent:
         messages = create_messages(query)
 
         for _ in range(MAX_TOOL_ITERATIONS):
-            print("\n[MODEL] Calling model...")
+            logger.info("\n[MODEL] Calling model...")
 
             response = await self.model_with_tools.ainvoke(messages)
 
@@ -132,11 +136,11 @@ class KBOAgent:
                 answer = response.content
                 evidence = collect_evidence(messages)
 
-                print("\n[DRAFT] Generated answer:")
-                print(answer)
+                logger.info("\n[DRAFT] Generated answer:")
+                logger.info(answer)
 
-                print("\n[EVIDENCE] Collected tool results:")
-                print(evidence)
+                logger.info("\n[EVIDENCE] Collected tool results:")
+                logger.info(evidence)
 
                 return answer, evidence
 
@@ -167,7 +171,7 @@ class KBOAgent:
             )
 
         try:
-            print(f"\n[TOOL] Executing {tool_call['name']}...")
+            logger.info(f"\n[TOOL] Executing {tool_call['name']}...")
 
             result = await tool.ainvoke(tool_call["args"])
 
@@ -214,7 +218,7 @@ class KBOAgent:
         Validate the draft answer using collected evidence.
         """
 
-        print("\n[VALIDATION] Validating answer...")
+        logger.info("\n[VALIDATION] Validating answer...")
 
         messages = [
             SystemMessage(content=VALIDATION_PROMPT),
@@ -249,7 +253,7 @@ Evidence:
         Correct an invalid answer using validation feedback.
         """
 
-        print("\n[CORRECTION] Correcting answer...")
+        logger.info("\n[CORRECTION] Correcting answer...")
 
         messages = [
             SystemMessage(content=MAIN_PROMPT),
@@ -293,37 +297,43 @@ and supported by the evidence.
         the final answer.
         """
 
-        # 1. Generate draft answer
-        answer, evidence = await self._generate_answer(query)
+        start_time = time.perf_counter()
 
-        # 2. Validate draft answer
-        validation = await self._validate(
-            query=query,
-            answer=answer,
-            evidence=evidence,
-        )
+        try:
+            # 1. Generate draft answer
+            answer, evidence = await self._generate_answer(query)
 
-        # 3. Return immediately if validation passes
-        if validation.is_valid:
-            print("\n[VALIDATION] Passed")
-            return answer
+            # 2. Validate draft answer
+            validation = await self._validate(
+                query=query,
+                answer=answer,
+                evidence=evidence,
+            )
 
-        print("\n[VALIDATION] Failed")
-        print(f"[VALIDATION] Reason: {validation.reason}")
-        print(f"[VALIDATION] Correction: {validation.correction}")
+            # 3. Return immediately if validation passes
+            if validation.is_valid:
+                logger.info("\n[VALIDATION] Passed")
+                return answer
 
-        # 4. Correct invalid answer
-        corrected_answer = await self._correct(
-            query=query,
-            answer=answer,
-            evidence=evidence,
-            validation=validation,
-        )
+            logger.info("\n[VALIDATION] Failed")
+            logger.info(f"[VALIDATION] Reason: {validation.reason}")
+            logger.info(f"[VALIDATION] Correction: {validation.correction}")
 
-        print("\n[CORRECTION] Corrected answer:")
-        print(corrected_answer)
+            # 4. Correct invalid answer
+            corrected_answer = await self._correct(
+                query=query,
+                answer=answer,
+                evidence=evidence,
+                validation=validation,
+            )
 
-        return corrected_answer
+            logger.info("\n[CORRECTION] Corrected answer:")
+            logger.info(corrected_answer)
+
+            return corrected_answer
+        finally:
+            elapsed_time = time.perf_counter() - start_time
+            logger.info(f"\n[TIME] Total elapsed time: {elapsed_time:.2f}s")
 
 
 # =========================================================
@@ -339,8 +349,8 @@ async def main():
         "KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
     )
 
-    print("\n[FINAL] Answer:")
-    print(result)
+    logger.info("\n[FINAL] Answer:")
+    logger.info(result)
 
 
 if __name__ == "__main__":

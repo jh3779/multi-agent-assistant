@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.tools.base import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 class DateTimeTool(BaseTool):
@@ -15,6 +18,10 @@ class DateTimeTool(BaseTool):
         self,
         **kwargs: Any,
     ) -> str:
+        logger.info(
+            "[TOOL] Getting current date and time for timezone: %s",
+            self.timezone,
+        )
         now = datetime.now(ZoneInfo(self.timezone))
 
         return now.isoformat()

@@ -1,8 +1,11 @@
+import logging
 from typing import Any
 
 from langchain_tavily import TavilySearch
 
 from app.tools.base import BaseTool
+
+logger = logging.getLogger(__name__)
 
 
 class WebSearchTool(BaseTool):
@@ -17,7 +20,7 @@ class WebSearchTool(BaseTool):
         query: str,
         **kwargs: Any,
     ) -> Any:
-        print(f"\n[TOOL] Searching web: {query}")
+        logger.info(f"\n[TOOL] Searching web: {query}")
         tavily = TavilySearch(
             tavily_api_key=self.settings.tavily_api_key,
             max_results=self.max_results,
@@ -31,7 +34,7 @@ class WebSearchTool(BaseTool):
         query: str,
         **kwargs: Any,
     ) -> Any:
-        print(f"\n[TOOL] Searching web: {query}")
+        logger.info(f"\n[TOOL] Searching web: {query}")
         tavily = TavilySearch(
             tavily_api_key=self.settings.tavily_api_key,
             max_results=self.max_results,
