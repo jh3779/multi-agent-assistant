@@ -7,9 +7,11 @@
 # 다루는 범위 좁은 에이전트다 — 다른 Tool이 생기면 그때 합치거나 라우팅을 얹으면 됨.
 #
 # 팀 공용 Agent(ABC)(app/llms/agent.py)를 실제로 상속한 첫 구현체 — 다른 담당자들이
-# 참고할 수 있게, 도구 실행 결과 검증(validate_tool_result)·최종 답변 검증
-# (answer_validation)도 자리채우기가 아니라 이 도구 맥락에서 실제로 의미 있는
-# 검증(도구가 성공을 주장하는데 artifact가 없는 경우 등 상태 불일치 탐지)으로 채웠다.
+# 참고할 수 있게, 최종 답변 검증(answer_validation)을 자리채우기가 아니라 이 도구
+# 맥락에서 실제로 의미 있는 검증(도구가 성공을 주장하는데 artifact가 없는 경우 등
+# 상태 불일치 탐지)으로 채웠다. validate_tool_result(도구별 결과 검증)는 팀 논의로
+# Agent(ABC)에서 빠졌지만(2026-08-12 app/llms/agent.py 변경), 여전히 유효한 검증이라
+# 이 클래스의 일반 메서드로 남겨뒀다 — astream()이 도구 실행마다 호출한다.
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -93,7 +95,7 @@ class FileConverterAgent(Agent):
             succeeded = False
         return ToolResultCheck(succeeded=succeeded, detail=content)
 
-    async def answer_validation(self, answer: str) -> AnswerCheck:
+    async def answer_validation(self, question: str, answer: str) -> AnswerCheck:
         has_artifacts = bool(self.memory.get("artifacts"))
         claims_conversion = "변환" in answer and "실패" not in answer
         # KBO 에이전트처럼 외부 근거로 사실관계를 대조할 대상이 없다(변환 성공 여부는
@@ -165,7 +167,9 @@ class FileConverterAgent(Agent):
         self.memory["answer"] = answer
 
         # 4단계: 최종 답변이 실제 실행 결과와 모순되지 않는지 검증
-        self.memory["answer_validation"] = await self.answer_validation(answer.summary)
+        self.memory["answer_validation"] = await self.answer_validation(
+            full_question, answer.summary
+        )
 
         # with_structured_output은 완성된 Pydantic 객체를 한 번에 반환하므로(토큰
         # 단위 부분 JSON을 안전하게 노출할 수 없음), 여기서는 완성된 요약을 한
