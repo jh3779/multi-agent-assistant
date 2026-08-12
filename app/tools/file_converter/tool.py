@@ -1,7 +1,8 @@
 # app/tools/base.py의 BaseTool(LangChain)을 상속한, "LLM이 도구로 호출하는" 경로.
-# 채팅 UI가 fetch()로 직접 부르는 router.py와는 별개 — 지금은 그걸 호출할 진짜
-# LLM(Main LLM)이 없어서, 이 클래스는 스키마 생성(bind_tools)과 개별 함수 호출까지만
-# 검증됐고 실제 에이전트 루프 안에서 호출된 적은 없다.
+# 채팅 UI가 fetch()로 직접 부르는 router.py와는 별개 — 이쪽은 app/llms/
+# file_converter_agent.py의 ask()가 진짜 LLM(gpt-4o-mini) 에이전트 루프 안에서
+# 호출한다(실제 OPENAI_API_KEY로 docx/html 변환까지 end-to-end 검증됨). 다만
+# 아직 HTTP 엔드포인트로는 안 열려있어 채팅 UI에서 이 경로를 타진 않는다.
 import asyncio
 import tempfile
 from pathlib import Path

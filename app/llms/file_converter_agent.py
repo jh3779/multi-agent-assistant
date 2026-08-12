@@ -1,6 +1,7 @@
-# FileConverterTool을 실제 LLM이 도구로 호출하는 최소 경로 — 지금까지 tool.py는
-# bind_tools() 스키마 생성과 개별 함수 호출까지만 검증됐고, 진짜 에이전트 루프
-# 안에서 호출된 적은 없었음. 그 공백을 메우는 자리표시자 겸 데모.
+# FileConverterTool을 실제 LLM이 도구로 호출하는 최소 경로. 실제 OPENAI_API_KEY로
+# docx/html 변환이 진짜 에이전트 루프(bind_tools → 도구 실행 → 구조화 출력)를
+# 통과하는 것까지 end-to-end 검증됨. 다만 아직 HTTP 엔드포인트로 노출되지 않아서
+# (POST /chat은 별도의 목 구현) 채팅 UI에서는 이 경로를 아직 안 탄다.
 #
 # Main LLM(중앙 오케스트레이터)은 팀이 폐기했으므로, 이건 file_converter 하나만
 # 다루는 범위 좁은 에이전트다 — 다른 Tool이 생기면 그때 합치거나 라우팅을 얹으면 됨.
