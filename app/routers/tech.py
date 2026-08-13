@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from app.dependencise import get_tech_service
+from app.dependencies import get_tech_service
 from app.schemas.tech import TechQuestionRequest
 from app.services.tech import TechService
 

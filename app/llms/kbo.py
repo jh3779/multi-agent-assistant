@@ -18,11 +18,9 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.runnables import Runnable, RunnableLambda
-from langchain_openai import ChatOpenAI
 
 from app.llms.agent import Agent
 from app.schemas.kbo import ValidationResult
-from app.setting import settings
 from app.tools.date_time import DateTimeTool
 from app.tools.web_search import WebSearchTool
 
@@ -32,9 +30,6 @@ logger = logging.getLogger(__name__)
 # =========================================================
 # Config
 # =========================================================
-
-MODEL_NAME = "gpt-4o-mini"
-TEMPERATURE = 0
 
 MAX_TOOL_ITERATIONS = 5
 
@@ -83,7 +78,7 @@ def collect_evidence(
 
 
 class KBOAgent(Agent):
-    def __init__(self):
+    def __init__(self, model):
 
         # -------------------------------------------------
         # Tools
@@ -105,12 +100,6 @@ class KBOAgent(Agent):
         # -------------------------------------------------
         # Model
         # -------------------------------------------------
-
-        model = ChatOpenAI(
-            api_key=settings.openai_api_key,
-            model=MODEL_NAME,
-            temperature=TEMPERATURE,
-        )
 
         super().__init__(model)
 
@@ -430,38 +419,3 @@ and supported by the evidence.
         for chunk in final_answer.split():
             yield chunk + " "
             await asyncio.sleep(0.03)
-
-
-# =========================================================
-# Test
-# =========================================================
-
-
-async def main():
-    agent = KBOAgent()
-
-    first_chunk = True
-
-    async for chunk in agent.astream(
-        "26년 8월 13일 기준 KBO 순위와 타율 TOP 5 를 알려줘."
-    ):
-        if first_chunk:
-            print("\n[FINAL] Answer:")
-            first_chunk = False
-
-        print(
-            chunk,
-            end="",
-            flush=True,
-        )
-
-    print()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format=("%(asctime)s | %(levelname)s | %(name)s | %(message)s"),
-    )
-
-    asyncio.run(main())

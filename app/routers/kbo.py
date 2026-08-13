@@ -1,15 +1,16 @@
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from app.llms.kbo import KBOAgent
+from app.dependencies import get_kbo_service
 from app.schemas.kbo import KBORequest, KBOResponse
+from app.services.kbo import KBOService
 
 router = APIRouter(
     prefix="/kbo",
     tags=["KBO"],
 )
-
-agent = KBOAgent()
 
 
 @router.post(
@@ -18,16 +19,19 @@ agent = KBOAgent()
 )
 async def invoke_agent(
     request: KBORequest,
+    service: Annotated[KBOService, Depends(get_kbo_service)],
 ) -> KBOResponse:
-    answer = await agent.ainvoke(request.query)
+    answer = await service.ainvoke(request.query)
+
     return KBOResponse(answer=answer)
 
 
 @router.post("/stream")
 async def stream_agent(
     request: KBORequest,
+    service: Annotated[KBOService, Depends(get_kbo_service)],
 ) -> StreamingResponse:
     return StreamingResponse(
-        agent.astream(request.query),
+        service.astream(request.query),
         media_type="text/plain",
     )
