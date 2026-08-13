@@ -54,7 +54,13 @@ MAX_TOOL_ROUNDS = 3
 MAX_ANSWER_ATTEMPTS = 2
 
 # 최종 답변을 흘려보낼 때 한 번에 내보내는 글자 수.
-ANSWER_CHUNK_SIZE = 24
+ANSWER_CHUNK_SIZE = 3
+
+# 조각 사이 간격. 없으면 완성본이라 전부 같은 순간에 도착한다.
+ANSWER_CHUNK_DELAY = 0.04
+
+# 답변이 길어도 타이핑 총 시간이 이 값을 넘지 않도록 간격을 줄인다.
+ANSWER_STREAM_SECONDS = 1.5
 
 
 # 이 프롬프트는 도구 선택 단계에서만 쓰인다. 여기서 나온 문장은 사용자에게
@@ -219,10 +225,14 @@ class ToolSelectAgent(Agent):
 
         return self.prompt | self.model_with_tools
 
-    async def answer_validation(self, answer: str) -> BaseModel:
+    async def answer_validation(
+        self, question: str, answer: str, *args: Any, **kwargs: Any
+    ) -> BaseModel:
         raise NotImplementedError("답변 평가는 AnswerEvaluatorAgent가 맡는다.")
 
-    async def astream(self, question: str) -> AsyncIterator[str]:
+    async def astream(
+        self, question: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
         raise NotImplementedError("사용자 스트리밍은 BusinessAgent가 맡는다.")
 
     def format_memory(self) -> str:
@@ -297,18 +307,14 @@ class AnswerWriterAgent(Agent):
 
         return prompt | self.model
 
-    async def validate_tool_result(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        tool_result: Any,
+    async def answer_validation(
+        self, question: str, answer: str, *args: Any, **kwargs: Any
     ) -> BaseModel:
-        raise NotImplementedError("도구 검증은 ToolSelectAgent가 맡는다.")
-
-    async def answer_validation(self, answer: str) -> BaseModel:
         raise NotImplementedError("답변 평가는 AnswerEvaluatorAgent가 맡는다.")
 
-    async def astream(self, question: str) -> AsyncIterator[str]:
+    async def astream(
+        self, question: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
         raise NotImplementedError("사용자 스트리밍은 BusinessAgent가 맡는다.")
 
     async def write(self, question: str, tool_results: str, feedback: str = "") -> str:
@@ -342,28 +348,54 @@ class AnswerEvaluatorAgent(Agent):
         # 구조화 출력이라 판정 결과가 AnswerEvaluation으로 파싱되어 돌아온다.
         return prompt | self.model.with_structured_output(AnswerEvaluation)
 
-    async def validate_tool_result(
-        self,
-        tool_name: str,
-        tool_input: dict[str, Any],
-        tool_result: Any,
-    ) -> BaseModel:
-        raise NotImplementedError("도구 검증은 ToolSelectAgent가 맡는다.")
-
-    async def answer_validation(self, answer: str) -> BaseModel:
-        # 베이스 시그니처는 답변만 받는데, 평가하려면 질문과 도구 결과가 있어야
-        # 수치가 진짜인지 판단할 수 있다. 그래서 evaluate()를 별도로 둔다.
-        raise NotImplementedError("질문과 도구 결과가 필요하다. evaluate()를 쓴다.")
-
-    async def astream(self, question: str) -> AsyncIterator[str]:
+    async def astream(
+        self, question: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
         raise NotImplementedError("사용자 스트리밍은 BusinessAgent가 맡는다.")
 
-    async def evaluate(
-        self, question: str, tool_results: str, answer: str
+    def build_feedback(self, evaluation: AnswerEvaluation) -> str:
+        """자기가 내린 판정을 작성자가 바로 쓸 수 있는 지시문으로 옮긴다.
+
+        판정을 내린 쪽이 그 뜻도 해석한다. 오케스트레이터가 AnswerEvaluation의
+        필드를 일일이 들여다보지 않게 하려는 것이다.
+
+        별도 리라이터 LLM을 두지 않고 이 피드백을 작성자에게 되먹인다.
+        리라이터를 따로 두면 그쪽도 도구 결과를 못 봐서 환각이 다시 생긴다.
+        """
+
+        problems = [evaluation.reason] if evaluation.reason else []
+
+        if evaluation.unsupported_numbers:
+            problems.append(
+                "근거 없는 수치: "
+                + ", ".join(evaluation.unsupported_numbers)
+                + ". 도구 결과에 있는 값만 쓰세요."
+            )
+
+        if evaluation.hides_tool_failure:
+            problems.append("조회에 실패한 항목은 실패했다고 밝히세요.")
+
+        if not evaluation.answers_question:
+            problems.append("질문에서 물어본 내용에 직접 답하세요.")
+
+        return (
+            "\n[이전 답변의 문제점]\n"
+            + "\n".join(f"- {p}" for p in problems)
+            + "\n위 문제를 고쳐서 처음부터 다시 작성하세요."
+        )
+
+    async def answer_validation(
+        self,
+        question: str,
+        answer: str,
+        tool_results: str = "",
+        *args: Any,
+        **kwargs: Any,
     ) -> AnswerEvaluation:
         """질문·도구 결과·답변을 모두 주고 항목별로 판정받는다.
 
         답변만 주면 수치가 진짜인지 판단할 근거가 없어 환각을 못 잡는다.
+        베이스가 *args/**kwargs를 허용해서 tool_results를 추가로 받을 수 있다.
         """
 
         if not answer.strip():
@@ -429,9 +461,11 @@ class BusinessAgent(Agent):
             tool_name, tool_input, tool_result
         )
 
-    async def answer_validation(self, answer: str) -> AnswerEvaluation:
-        return await self.evaluator_agent.evaluate(
-            self.question, self.format_tool_results(), answer
+    async def answer_validation(
+        self, question: str, answer: str, *args: Any, **kwargs: Any
+    ) -> AnswerEvaluation:
+        return await self.evaluator_agent.answer_validation(
+            question, answer, self.format_tool_results()
         )
 
     def format_memory(self) -> str:
@@ -443,38 +477,12 @@ class BusinessAgent(Agent):
 
         return "\n".join(self.tool_results)
 
-    def build_feedback(self, evaluation: AnswerEvaluation) -> str:
-        """평가 결과를 작성자가 바로 쓸 수 있는 지시문으로 바꾼다.
-
-        별도 리라이터를 두지 않고 이 피드백을 작성자에게 되먹인다.
-        리라이터를 따로 두면 그쪽도 도구 결과를 못 봐서 환각이 다시 생긴다.
-        """
-
-        problems = [evaluation.reason] if evaluation.reason else []
-
-        if evaluation.unsupported_numbers:
-            problems.append(
-                "근거 없는 수치: "
-                + ", ".join(evaluation.unsupported_numbers)
-                + ". 도구 결과에 있는 값만 쓰세요."
-            )
-
-        if evaluation.hides_tool_failure:
-            problems.append("조회에 실패한 항목은 실패했다고 밝히세요.")
-
-        if not evaluation.answers_question:
-            problems.append("질문에서 물어본 내용에 직접 답하세요.")
-
-        return (
-            "\n[이전 답변의 문제점]\n"
-            + "\n".join(f"- {p}" for p in problems)
-            + "\n위 문제를 고쳐서 처음부터 다시 작성하세요."
-        )
-
     # 베이스 클래스가 astream을 `async def`로 선언해 Coroutine[..., AsyncIterator]가 된다.
     # 여기는 async generator라 반환형이 AsyncIterator 자체다. 베이스 수정 전까지 무시한다.
     # pyrefly: ignore[bad-override]
-    async def astream(self, question: str) -> AsyncIterator[str]:
+    async def astream(
+        self, question: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
         """도구 조회 -> 답변 작성 -> 품질 평가 -> (필요시) 재작성 순으로 진행한다.
 
         중간 단계는 사용자에게 보여줄 것이 아니므로 전부 ainvoke로 처리하고,
@@ -492,21 +500,46 @@ class BusinessAgent(Agent):
             answer = await self.writer_agent.write(
                 question, self.format_tool_results(), feedback
             )
-            evaluation = await self.answer_validation(answer)
+            evaluation = await self.answer_validation(question, answer)
 
             if evaluation.is_valid:
                 break
 
-            feedback = self.build_feedback(evaluation)
+            feedback = self.evaluator_agent.build_feedback(evaluation)
         else:
             # 한도를 다 써도 통과 못 하면 마지막 답변을 그대로 내보낸다.
             # 폴백이 없으면 평가자가 계속 거절할 때 무한 루프가 된다.
             pass
 
-        # 확정된 문자열이라 LLM을 다시 부르지 않고 조각내어 흘린다.
-        # 재생성하면 방금 검증한 답변과 다른 문장이 나갈 수 있다.
-        for start in range(0, len(answer), ANSWER_CHUNK_SIZE):
-            yield answer[start : start + ANSWER_CHUNK_SIZE]
+        async for piece in self.stream_answer(answer):
+            yield piece
+
+    async def stream_answer(self, answer: str) -> AsyncIterator[str]:
+        """확정된 답변을 타이핑하듯 조금씩 흘린다.
+
+        검증을 통과한 문자열이라 LLM을 다시 부르지 않는다. 재생성하면 방금
+        검증한 답변과 다른 문장이 나갈 수 있다. 즉 토큰 스트리밍이 아니라
+        완성본을 잘라 보내는 것이고, 간격이 없으면 전부 같은 순간에 도착한다.
+
+        답변 길이와 무관하게 총 소요가 ANSWER_STREAM_SECONDS를 넘지 않도록
+        간격을 자동으로 줄인다. 긴 답변에서 타이핑이 하염없이 이어지면
+        오히려 답답해지기 때문이다.
+        """
+
+        if not answer:
+            return
+
+        chunks = [
+            answer[i : i + ANSWER_CHUNK_SIZE]
+            for i in range(0, len(answer), ANSWER_CHUNK_SIZE)
+        ]
+        delay = min(ANSWER_CHUNK_DELAY, ANSWER_STREAM_SECONDS / len(chunks))
+
+        for index, chunk in enumerate(chunks):
+            if index:  # 첫 조각은 기다리지 않고 바로 내보낸다.
+                await asyncio.sleep(delay)
+
+            yield chunk
 
 
 if __name__ == "__main__":
