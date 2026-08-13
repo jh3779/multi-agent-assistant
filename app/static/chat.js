@@ -201,9 +201,11 @@ async function sendToKBO(text) {
   }
 }
 
-// /finance/stream은 GET + 쿼리스트링(브라우저 EventSource가 GET만 지원해서)이고,
-// SSE 프레임은 /chat·/kbo와 같은 한 줄 "data: {type, text}" 형식이다
-// (type: answer/done/error, app/schemas/finance.py의 FinanceStreamEvent 참고).
+// /finance/stream은 GET + 쿼리스트링이고,
+// /tech/stream과 같은 "event: <type>\ndata: <json>" 두 줄 SSE
+// 프레임이다(type: delta/done/error, app/schemas/finance.py의 FinanceStreamEvent
+// 참고). 원래는 /chat·/kbo처럼 한 줄짜리 "data: {type 포함}" 형식이었는데,
+// 팀원이 tech와 통일시키면서 바뀌었다.
 async function sendToFinance(text) {
   let processingEl = addProcessingIndicator();
   let answerEl = null;
@@ -231,30 +233,35 @@ async function sendToFinance(text) {
       buffer = parts.pop();
 
       for (const part of parts) {
-        const line = part.trim();
-        if (!line.startsWith("data:")) continue;
-        const event = JSON.parse(line.slice(5).trim());
+        let type = null;
+        let dataLine = null;
+        for (const line of part.split("\n")) {
+          if (line.startsWith("event:")) type = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLine = line.slice(5).trim();
+        }
+        if (!type || dataLine === null) continue;
+        const data = JSON.parse(dataLine);
 
         if (processingEl) {
           processingEl.remove();
           processingEl = null;
         }
 
-        if (event.type === "answer") {
+        if (type === "delta") {
           if (!answerEl) {
             answerEl = addMessage("assistant", "");
             answerEl.classList.add("streaming");
           }
-          answerText += event.text;
+          answerText += data.text;
           answerEl.innerHTML = renderMarkdown(answerText);
           scrollToBottom();
-        } else if (event.type === "done") {
+        } else if (type === "done") {
           if (answerEl) answerEl.classList.remove("streaming");
           pushSyntheticLog("business_agent", "완료");
-        } else if (event.type === "error") {
-          pushSyntheticLog("business_agent", `종료 — error: ${event.text}`);
+        } else if (type === "error") {
+          pushSyntheticLog("business_agent", `종료 — error: ${data.message || ""}`);
           addErrorMessage(
-            event.text || "답변을 받지 못했습니다.",
+            data.message || "답변을 받지 못했습니다.",
             () => sendMessage(text)
           );
         }
