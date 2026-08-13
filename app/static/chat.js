@@ -176,12 +176,17 @@ async function sendToKBO(text) {
       }
 
       answerText += chunk;
-      answerEl.innerHTML = renderMarkdown(answerText);
+
+      // 스트리밍 중에는 Markdown 렌더링하지 않고
+      // 원문 텍스트만 보여준다.
+      answerEl.textContent = answerText;
 
       scrollToBottom();
     }
 
     if (answerEl) {
+      // 스트림이 모두 끝난 뒤 Markdown을 한 번만 렌더링
+      answerEl.innerHTML = renderMarkdown(answerText);
       answerEl.classList.remove("streaming");
     }
   } catch (err) {

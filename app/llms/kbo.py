@@ -410,12 +410,10 @@ and supported by the evidence.
         *args,
         **kwargs,
     ) -> AsyncIterator[str]:
-        """
-        Stream the validated final answer.
-        """
-
         final_answer = await self.ainvoke(question)
 
-        for chunk in final_answer.split():
-            yield chunk + " "
+        chunk_size = 20
+
+        for i in range(0, len(final_answer), chunk_size):
+            yield final_answer[i : i + chunk_size]
             await asyncio.sleep(0.03)
