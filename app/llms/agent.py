@@ -19,15 +19,27 @@ class Agent(ABC):
         self.memory: dict[str, Any] = {}
 
     @abstractmethod
-    def create_system_prompt(self, *args, **kwargs) -> SystemMessagePromptTemplate:
+    def create_system_prompt(
+        self,
+        *args,
+        **kwargs,
+    ) -> SystemMessagePromptTemplate:
         """LLM의 역할과 답변 기준을 정의한다."""
 
     @abstractmethod
-    def create_human_prompt(self, *args, **kwargs) -> HumanMessagePromptTemplate:
+    def create_human_prompt(
+        self,
+        *args,
+        **kwargs,
+    ) -> HumanMessagePromptTemplate:
         """사용자 질문의 입력 형식을 정의한다."""
 
     @abstractmethod
-    def create_workflow(self, *args, **kwargs) -> Runnable[Any, Any]:
+    def create_workflow(
+        self,
+        *args,
+        **kwargs,
+    ) -> Runnable[Any, Any]:
         """
         프롬프트, 모델, 도구 실행, 결과 검증, 답변 검증을 조합해
         구현 클래스만의 LLM 실행 파이프라인을 만든다.
@@ -35,10 +47,17 @@ class Agent(ABC):
 
     @abstractmethod
     async def answer_validation(
-        self, question: str, answer: str, *args, **kwargs
+        self,
+        question: str,
+        answer: str,
+        *args,
+        **kwargs,
     ) -> BaseModel:
         """LLM의 최종 답변을 평가한다."""
 
     @abstractmethod
-    async def astream(self, question: str, *args, **kwargs) -> AsyncIterator[str]:
-        """도구 실행과 답변 생성을 처리하며 결과를 스트리밍한다."""
+    async def astream(self, question: str, *args, **kwargs) -> AsyncIterator[Any]:
+        """도구 실행과 답변 생성을 처리하며 진행 상황을 스트리밍한다.
+
+        전송 형식(SSE 등) 변환은 이 결과를 사용하는 쪽에서 담당한다.
+        """

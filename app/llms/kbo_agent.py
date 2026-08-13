@@ -428,38 +428,3 @@ and supported by the evidence.
         for chunk in final_answer.split():
             yield chunk + " "
             await asyncio.sleep(0.03)
-
-
-# =========================================================
-# Test
-# =========================================================
-
-
-async def main():
-    agent = KBOAgent()
-
-    first_chunk = True
-
-    async for chunk in agent.astream(
-        "KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
-    ):
-        if first_chunk:
-            print("\n[FINAL] Answer:")
-            first_chunk = False
-
-        print(
-            chunk,
-            end="",
-            flush=True,
-        )
-
-    print()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format=("%(asctime)s | %(levelname)s | %(name)s | %(message)s"),
-    )
-
-    asyncio.run(main())

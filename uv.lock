@@ -602,7 +602,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "langchain" },
     { name = "langchain-openai", specifier = ">=1.4.2" },
-    { name = "langchain-tavily" },
+    { name = "langchain-tavily", specifier = ">=0.2.18" },
     { name = "langsmith", specifier = ">=0.10.17" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
@@ -610,7 +610,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "requests" },
-    { name = "uvicorn", extras = ["standard"] },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 
 [package.metadata.requires-dev]
