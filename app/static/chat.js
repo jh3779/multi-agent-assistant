@@ -124,6 +124,8 @@ async function sendMessage(text) {
       await sendToKBO(text);
     } else if (selectedAgent === "tech") {
       await sendToTech(text);
+    } else if (selectedAgent === "business") {
+      await sendToFinance(text);
     } else {
       await sendToFileConverter(text);
     }
@@ -155,6 +157,72 @@ async function sendToKBO(text) {
   } catch (err) {
     processingEl.remove();
     addErrorMessage(`답변을 받지 못했습니다: ${err.message}`, () => sendMessage(text));
+  }
+}
+
+// /finance/stream은 GET + 쿼리스트링(브라우저 EventSource가 GET만 지원해서)이고,
+// SSE 프레임은 /chat·/kbo와 같은 한 줄 "data: {type, text}" 형식이다
+// (type: answer/done/error, app/schemas/api.py의 StreamEvent 참고).
+async function sendToFinance(text) {
+  let processingEl = addProcessingIndicator();
+  let answerEl = null;
+  let answerText = "";
+
+  pushSyntheticLog("business_agent", "답변 생성 중");
+
+  try {
+    const res = await fetch(`/finance/stream?question=${encodeURIComponent(text)}`);
+
+    if (!res.ok || !res.body) {
+      throw new Error(`서버 오류 (${res.status})`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop();
+
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith("data:")) continue;
+        const event = JSON.parse(line.slice(5).trim());
+
+        if (processingEl) {
+          processingEl.remove();
+          processingEl = null;
+        }
+
+        if (event.type === "answer") {
+          if (!answerEl) {
+            answerEl = addMessage("assistant", "");
+            answerEl.classList.add("streaming");
+          }
+          answerText += event.text;
+          answerEl.innerHTML = renderMarkdown(answerText);
+          scrollToBottom();
+        } else if (event.type === "done") {
+          if (answerEl) answerEl.classList.remove("streaming");
+          pushSyntheticLog("business_agent", "완료");
+        } else if (event.type === "error") {
+          pushSyntheticLog("business_agent", `종료 — error: ${event.text}`);
+          addErrorMessage(
+            event.text || "답변을 받지 못했습니다.",
+            () => sendMessage(text)
+          );
+        }
+      }
+    }
+  } catch (err) {
+    addErrorMessage(`답변을 받지 못했습니다: ${err.message}`, () => sendMessage(text));
+  } finally {
+    if (processingEl) processingEl.remove();
   }
 }
 
@@ -512,9 +580,12 @@ window.addEventListener("drop", (e) => {
 // 채워주면 된다(business/agent4는 아직 로거가 없어 "미연결" 상태로 남는다).
 const AGENT_META = [
   { key: "file_converter", label: "파일 변환", logger: "app.llms.file_converter_agent" },
-  { key: "kbo", label: "KBO", logger: "app.llms.kbo_agent" },
+  // app/llms/kbo_agent.py → kbo.py로 파일명이 바뀌면서 로거 이름도 바뀜(logging.getLogger(__name__)).
+  { key: "kbo", label: "KBO", logger: "app.llms.kbo" },
   { key: "tech", label: "Tech", logger: "app.llms.tech" },
-  { key: "business", label: "비즈니스", logger: null },
+  // business_agent.py(루트)는 백엔드 로깅이 없어 sendToFinance()가 SSE 이벤트를
+  // 그대로 pushSyntheticLog로 주입한다 — Tech(app.llms.tech)와 같은 방식.
+  { key: "business", label: "금융", logger: "business_agent" },
 ];
 
 const LOGGER_TO_AGENT = Object.fromEntries(
@@ -634,33 +705,28 @@ function pushSyntheticLog(loggerName, message) {
   appendLogEntry({ time, level: "INFO", logger: loggerName, message });
 }
 
-function resetProgress() {
-  AGENT_META.forEach((a) => {
-    agentProgress[a.key] = { stage: a.logger ? "대기 중" : "미연결", time: null };
-  });
-  lastActiveAgentKey = null;
-  renderProgress();
-}
-
-function openLogPanel() {
-  logPanel.hidden = false;
+// /logs/stream 연결은 패널을 열고 닫을 때마다 새로 만들지 않고 페이지가
+// 떠 있는 동안 계속 유지한다 — 패널이 닫혀 있어도 백그라운드에서 로그가
+// 계속 쌓여야, 나중에 열었을 때 그사이 활동(Tech/금융처럼 백엔드 로거가
+// 없어 pushSyntheticLog로만 기록되는 에이전트 포함)이 안 사라진다. 예전엔
+// 열 때마다 body를 비우고 재연결해서, 패널을 닫아둔 채 보낸 요청의 합성
+// 로그가 다음에 열면 사라지는 문제가 있었다.
+function ensureLogStreamConnected() {
   if (logEventSourceOpen) return;
   logEventSourceOpen = true;
-  logPanelBody.innerHTML = "";
-  resetProgress();
   logEventSource = new EventSource("/logs/stream");
   logEventSource.onmessage = (e) => {
     appendLogEntry(JSON.parse(e.data));
   };
 }
 
+function openLogPanel() {
+  logPanel.hidden = false;
+  ensureLogStreamConnected();
+}
+
 function closeLogPanel() {
   logPanel.hidden = true;
-  if (logEventSource) {
-    logEventSource.close();
-    logEventSource = null;
-  }
-  logEventSourceOpen = false;
 }
 
 renderProgress();
