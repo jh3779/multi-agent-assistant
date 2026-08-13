@@ -215,7 +215,9 @@ class TechAgent(Agent):
                     cache=self.memory.setdefault("web_search", {}),
                 ),
             ],
-            system_prompt=self.create_system_prompt().format(),
+            # create_agent는 str | SystemMessage를 받는데 format()의 정적 타입은
+            # BaseMessage라 넓다. 내용만 꺼내 넘긴다(런타임 동작은 동일).
+            system_prompt=str(self.create_system_prompt().format().content),
             response_format=ProviderStrategy(TechAgentResponse),
         )
 
