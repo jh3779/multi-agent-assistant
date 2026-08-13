@@ -1,11 +1,11 @@
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 
+from app.llms.business_agent import BusinessAgent
 from app.schemas.finance import (
     FinanceAnswerResponse,
     FinanceStreamEvent,
 )
-from business_agent import BusinessAgent
 
 logger = logging.getLogger(__name__)
 

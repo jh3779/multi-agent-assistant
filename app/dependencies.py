@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import Depends
 from langchain_openai import ChatOpenAI
 
+from app.llms.business_agent import BusinessAgent
 from app.llms.file_converter_agent import FileConverterAgent
 from app.llms.kbo import KBOAgent
 from app.llms.tech import TechAgent
@@ -12,7 +13,6 @@ from app.services.finance import FinanceService
 from app.services.kbo import KBOService
 from app.services.tech import TechService
 from app.setting import settings
-from business_agent import BusinessAgent
 
 
 @lru_cache

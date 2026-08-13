@@ -24,30 +24,6 @@ from app.tools.finance import (
 )
 from app.tools.search import WebSearchTool
 
-
-async def main():
-    # ChatOpenAI는 os.environ만 보므로 .env를 읽은 settings에서 키를 직접 넘긴다.
-    model = ChatOpenAI(
-        model="gpt-4o-mini",
-        temperature=0,
-        api_key=settings.openai_api_key,
-    )
-    agent = BusinessAgent(model)
-
-    while True:
-        user_input = input("\n사용자: ")
-
-        if user_input.lower() in ["exit", "quit"]:
-            break
-
-        print("AI: ", end="")
-
-        async for chunk in agent.astream(user_input):
-            print(chunk, end="", flush=True)
-
-        print()
-
-
 # 두 루프 모두 상한이 필요하다. 평가자는 생각보다 자주 거절하고,
 # 도구 호출도 모델이 같은 도구를 반복 호출하며 맴돌 수 있다.
 MAX_TOOL_ROUNDS = 3
@@ -534,6 +510,35 @@ class BusinessAgent(Agent):
                 await asyncio.sleep(delay)
 
             yield chunk
+
+
+async def main():
+    """터미널에서 직접 굴려보는 진입점. `python -m app.llms.business_agent`.
+
+    패키지 안으로 들어오면서 파일을 직접 실행하는 방식(`python business_agent.py`)은
+    쓸 수 없다. `app.*` 임포트를 해석하려면 저장소 루트가 sys.path에 있어야 한다.
+    """
+
+    # ChatOpenAI는 os.environ만 보므로 .env를 읽은 settings에서 키를 직접 넘긴다.
+    model = ChatOpenAI(
+        model="gpt-4o-mini",
+        temperature=0,
+        api_key=settings.openai_api_key,
+    )
+    agent = BusinessAgent(model)
+
+    while True:
+        user_input = input("\n사용자: ")
+
+        if user_input.lower() in ["exit", "quit"]:
+            break
+
+        print("AI: ", end="")
+
+        async for chunk in agent.astream(user_input):
+            print(chunk, end="", flush=True)
+
+        print()
 
 
 if __name__ == "__main__":

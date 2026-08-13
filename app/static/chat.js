@@ -624,8 +624,9 @@ const AGENT_META = [
   // app/llms/kbo_agent.py → kbo.py로 파일명이 바뀌면서 로거 이름도 바뀜(logging.getLogger(__name__)).
   { key: "kbo", label: "KBO", logger: "app.llms.kbo" },
   { key: "tech", label: "Tech", logger: "app.llms.tech" },
-  // business_agent.py(루트)는 백엔드 로깅이 없어 sendToFinance()가 SSE 이벤트를
+  // app/llms/business_agent.py는 백엔드 로깅이 없어 sendToFinance()가 SSE 이벤트를
   // 그대로 pushSyntheticLog로 주입한다 — Tech(app.llms.tech)와 같은 방식.
+  // 그래서 아래 logger는 실제 파이썬 로거 이름이 아니라 합성 로그용 키다.
   { key: "business", label: "금융", logger: "business_agent" },
 ];
 
