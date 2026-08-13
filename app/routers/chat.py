@@ -25,6 +25,7 @@ def _sse(event: dict) -> str:
 
 async def _stream_answer(message: str) -> AsyncIterator[str]:
     agent = FileConverterAgent()
+
     try:
         chunks = [chunk async for chunk in agent.astream(message)]
     except Exception as exc:  # noqa: BLE001
