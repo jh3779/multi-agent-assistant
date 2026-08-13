@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
-from app.dependencise import get_finance_service
+from app.dependencies import get_finance_service
 from app.schemas.finance import FinanceAnswerResponse, FinanceQuestionRequest
 from app.services.finance import FinanceService
 

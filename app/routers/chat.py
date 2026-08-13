@@ -15,7 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from app.dependencise import get_chat_service
+from app.dependencies import get_chat_service
 from app.schemas.chat import ChatRequest
 from app.services.chat import ChatService
 
