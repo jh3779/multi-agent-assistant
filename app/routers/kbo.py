@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.llms.kbo_agent import KBOAgent
+from app.llms.kbo import KBOAgent
 from app.schemas.kbo import KBORequest, KBOResponse
 
 router = APIRouter(

@@ -93,6 +93,7 @@ class KBOAgent(Agent):
             WebSearchTool(
                 max_results=MAX_SEARCH_RESULTS,
                 search_depth=SEARCH_DEPTH,
+                include_domains=["web1.koreabaseball.com"],
             ),
             DateTimeTool(
                 timezone=TIMEZONE,
@@ -429,3 +430,38 @@ and supported by the evidence.
         for chunk in final_answer.split():
             yield chunk + " "
             await asyncio.sleep(0.03)
+
+
+# =========================================================
+# Test
+# =========================================================
+
+
+async def main():
+    agent = KBOAgent()
+
+    first_chunk = True
+
+    async for chunk in agent.astream(
+        "26년 8월 13일 기준 KBO 순위와 타율 TOP 5 를 알려줘."
+    ):
+        if first_chunk:
+            print("\n[FINAL] Answer:")
+            first_chunk = False
+
+        print(
+            chunk,
+            end="",
+            flush=True,
+        )
+
+    print()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format=("%(asctime)s | %(levelname)s | %(name)s | %(message)s"),
+    )
+
+    asyncio.run(main())
