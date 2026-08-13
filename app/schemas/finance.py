@@ -1,8 +1,11 @@
-"""금융 도구의 입력 스키마.
+"""금융 도메인 스키마.
 
-각 필드의 description은 그대로 LLM에게 전달되는 지시문이다.
-도구 호출 인자가 틀리는 것을 막는 것이 목적이므로 예시를 구체적으로 적는다.
+앞부분은 도구 입력 스키마다. 각 필드의 description은 그대로 LLM에게 전달되는
+지시문이므로 예시를 구체적으로 적는다.
+뒷부분은 HTTP 요청·응답과 SSE 이벤트 스키마다.
 """
+
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,3 +45,35 @@ class GetInterestRateInput(BaseModel):
             "질문에 나라가 없으면 한국으로 본다."
         )
     )
+
+
+class FinanceQuestionRequest(BaseModel):
+    question: str = Field(
+        min_length=1,
+        max_length=500,
+        description="금융 관련 질문",
+        examples=["삼성전자 주가 알려줘"],
+    )
+
+
+class FinanceAnswerResponse(BaseModel):
+    question: str
+
+    answer: str
+
+    tool_results: list[str] = Field(
+        description="에이전트가 실제로 조회한 도구 결과. 답변의 근거를 확인할 때 쓴다."
+    )
+
+
+class FinanceStreamEvent(BaseModel):
+    """SSE로 내보낼 단일 이벤트.
+
+    delta: 최종 답변 조각
+    done:  스트림 종료
+    error: 처리 중 발생한 오류
+    """
+
+    type: Literal["delta", "done", "error"]
+
+    data: dict[str, Any] = Field(default_factory=dict)
