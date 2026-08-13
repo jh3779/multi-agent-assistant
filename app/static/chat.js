@@ -44,11 +44,23 @@ function scrollToBottom() {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+// 에이전트 답변은 마크다운(표/코드블록/목록/굵게 등)으로 오는 경우가 많아
+// textContent로 찍으면 문법 기호가 그대로 노출된다 — marked로 HTML을 만들고
+// DOMPurify로 살균한 뒤 innerHTML로 렌더링해서 실제 서식이 보이게 한다.
+function renderMarkdown(text) {
+  const html = marked.parse(text, { async: false, breaks: true });
+  return DOMPurify.sanitize(html);
+}
+
 function addMessage(role, text) {
   hideEmptyState();
   const el = document.createElement("div");
   el.className = `message ${role}`;
-  el.textContent = text;
+  if (role === "assistant") {
+    el.innerHTML = renderMarkdown(text);
+  } else {
+    el.textContent = text;
+  }
   chatLog.appendChild(el);
   scrollToBottom();
   return el;
@@ -110,6 +122,8 @@ async function sendMessage(text) {
   try {
     if (selectedAgent === "kbo") {
       await sendToKBO(text);
+    } else if (selectedAgent === "tech") {
+      await sendToTech(text);
     } else {
       await sendToFileConverter(text);
     }
@@ -144,9 +158,103 @@ async function sendToKBO(text) {
   }
 }
 
+// /tech/stream은 /chat·/kbo와 SSE 프레임 형식이 다르다 — 한 줄짜리
+// "data: {...type 포함...}" 대신 "event: <type>\ndata: <json>" 두 줄 구성이라
+// 별도로 파싱한다(type: status/delta/result/error, app/schemas/tech.py 참고).
+async function sendToTech(text) {
+  const processingEl = addProcessingIndicator();
+  let statusEl = null;
+  let answerEl = null;
+  let answerText = "";
+
+  try {
+    const res = await fetch("/tech/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: text }),
+    });
+
+    if (!res.ok || !res.body) {
+      throw new Error(`서버 오류 (${res.status})`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop();
+
+      for (const part of parts) {
+        let type = null;
+        let dataLine = null;
+        for (const line of part.split("\n")) {
+          if (line.startsWith("event:")) type = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLine = line.slice(5).trim();
+        }
+        if (!type || dataLine === null) continue;
+        const data = JSON.parse(dataLine);
+
+        if (processingEl) {
+          processingEl.remove();
+        }
+
+        if (type === "status") {
+          if (!statusEl) statusEl = addToolStatus("tech");
+          statusEl.querySelector("span:last-child").textContent = data.message;
+          pushSyntheticLog("app.llms.tech", data.message);
+        } else if (type === "delta") {
+          if (statusEl) {
+            statusEl.remove();
+            statusEl = null;
+          }
+          if (!answerEl) {
+            answerEl = addMessage("assistant", "");
+            answerEl.classList.add("streaming");
+          }
+          answerText += data.text;
+          answerEl.innerHTML = renderMarkdown(answerText);
+          scrollToBottom();
+        } else if (type === "result") {
+          if (statusEl) {
+            statusEl.remove();
+            statusEl = null;
+          }
+          if (answerEl) answerEl.classList.remove("streaming");
+          pushSyntheticLog(
+            "app.llms.tech",
+            data.status === "success" ? "완료" : `종료 — ${data.status}`
+          );
+        } else if (type === "error") {
+          if (statusEl) {
+            statusEl.remove();
+            statusEl = null;
+          }
+          pushSyntheticLog("app.llms.tech", `종료 — error: ${data.message || ""}`);
+          addErrorMessage(
+            data.message || "답변을 받지 못했습니다.",
+            () => sendMessage(text)
+          );
+        }
+      }
+    }
+  } catch (err) {
+    if (statusEl) statusEl.remove();
+    addErrorMessage(`답변을 받지 못했습니다: ${err.message}`, () => sendMessage(text));
+  } finally {
+    if (processingEl) processingEl.remove();
+  }
+}
+
 async function sendToFileConverter(text) {
   const toolStatusEls = new Map();
   let answerEl = null;
+  let answerText = "";
   let processingEl = addProcessingIndicator();
 
   try {
@@ -198,7 +306,8 @@ async function sendToFileConverter(text) {
             answerEl = addMessage("assistant", "");
             answerEl.classList.add("streaming");
           }
-          answerEl.textContent += event.content;
+          answerText += event.content;
+          answerEl.innerHTML = renderMarkdown(answerText);
           scrollToBottom();
         } else if (event.type === "done") {
           if (answerEl) answerEl.classList.remove("streaming");
@@ -404,8 +513,8 @@ window.addEventListener("drop", (e) => {
 const AGENT_META = [
   { key: "file_converter", label: "파일 변환", logger: "app.llms.file_converter_agent" },
   { key: "kbo", label: "KBO", logger: "app.llms.kbo_agent" },
+  { key: "tech", label: "Tech", logger: "app.llms.tech" },
   { key: "business", label: "비즈니스", logger: null },
-  { key: "agent4", label: "준비 중", logger: null },
 ];
 
 const LOGGER_TO_AGENT = Object.fromEntries(
@@ -440,6 +549,18 @@ function deriveStage(message) {
   if (message.startsWith("[CORRECTION] Correcting")) return "답변 보정 중";
   if (message.startsWith("[CORRECTION] Corrected")) return "보정 완료";
   if (message.startsWith("[TIME]")) return "완료";
+  // TechAgent(app/llms/tech.py)는 [TAG] 형식 로그 대신 SSE status 이벤트로 진행
+  // 상황을 알려준다 — sendToTech()가 그 메시지를 그대로 여기로 흘려보낸다.
+  if (
+    /^답변 생성 중/.test(message) ||
+    /^응답 형식 오류/.test(message) ||
+    /^답변 품질 검증 중/.test(message) ||
+    /^검증 점수 \d+점/.test(message) ||
+    /^완료/.test(message) ||
+    /^종료/.test(message)
+  ) {
+    return message;
+  }
   return null;
 }
 
@@ -498,6 +619,19 @@ function appendLogEntry(entry) {
     agentProgress[targetKey] = { stage, time: entry.time };
     renderProgress();
   }
+}
+
+// TechAgent는 백엔드 로거 대신 SSE status 이벤트로 진행 상황을 알려주므로
+// (/logs/stream에 안 잡힘), sendToTech()가 받은 그대로 로그 패널에 주입한다.
+function pushSyntheticLog(loggerName, message) {
+  // 백엔드 로그(app/log_stream.py)는 서버의 로컬 시간대(Asia/Seoul)로 시각을
+  // 남긴다 — toISOString()의 UTC 대신 브라우저 로컬 시간을 써야 같은 타임라인에
+  // 섞여도 시간이 거꾸로 가는 것처럼 보이지 않는다.
+  const now = new Date();
+  const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map((n) => String(n).padStart(2, "0"))
+    .join(":");
+  appendLogEntry({ time, level: "INFO", logger: loggerName, message });
 }
 
 function resetProgress() {
