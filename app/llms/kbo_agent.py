@@ -92,6 +92,7 @@ class KBOAgent(Agent):
             WebSearchTool(
                 max_results=MAX_SEARCH_RESULTS,
                 search_depth=SEARCH_DEPTH,
+                include_domains=["web1.koreabaseball.com"],
             ),
             DateTimeTool(
                 timezone=TIMEZONE,
@@ -441,7 +442,7 @@ async def main():
     first_chunk = True
 
     async for chunk in agent.astream(
-        "KBO 순위를 찾고, 그 순위에서 1위인 구단에 대해 설명해줘."
+        "26년 8월 13일 기준 KBO 순위와 타율 TOP 5 를 알려줘."
     ):
         if first_chunk:
             print("\n[FINAL] Answer:")
