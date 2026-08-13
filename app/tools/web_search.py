@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from langchain_tavily import TavilySearch
+from pydantic import Field
 
 from app.tools.base import BaseTool
 
@@ -42,3 +43,31 @@ class WebSearchTool(BaseTool):
         )
 
         return await tavily.ainvoke({"query": query})
+
+
+class CachedWebSearchTool(WebSearchTool):
+    """검색 결과를 query 기준으로 캐싱하는 WebSearchTool."""
+
+    cache: Any = Field(default_factory=dict)
+
+    async def _arun(
+        self,
+        query: str,
+    ) -> Any:
+        if query in self.cache:
+            logger.info("검색 캐시 사용: %s", query)
+            return self.cache[query]
+
+        self.cache[query] = await super()._arun(query)
+        return self.cache[query]
+
+    def _run(
+        self,
+        query: str,
+    ) -> Any:
+        if query in self.cache:
+            logger.info("검색 캐시 사용: %s", query)
+            return self.cache[query]
+
+        self.cache[query] = super()._run(query)
+        return self.cache[query]

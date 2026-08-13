@@ -12,7 +12,6 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.runnables import Runnable, RunnableLambda
-from pydantic import Field
 
 from app.llms.agent import Agent
 from app.schemas.tech import (
@@ -20,53 +19,9 @@ from app.schemas.tech import (
     TechAgentResponse,
     TechStreamEvent,
 )
-from app.tools.web_search import WebSearchTool
+from app.tools.web_search import CachedWebSearchTool
 
 logger = logging.getLogger(__name__)
-
-
-class CachedWebSearchTool(WebSearchTool):
-    """검색 결과를 캐싱하는 WebSearchTool.
-
-    재시도할 때마다 같은 query를 다시 검색하는 것을 막는다.
-    캐시가 필요 없는 곳에서는 원본 WebSearchTool을 그대로 사용하면 된다.
-    """
-
-    # dict[str, Any]로 선언하면 pydantic이 값을 복사하기 때문에
-    # 밖에서 넘긴 dict(agent memory)와 같은 객체를 공유하지 못한다.
-    cache: Any = Field(default_factory=dict)
-
-    @staticmethod
-    def _cache_key(query: str) -> str:
-        return query
-
-    async def _arun(
-        self,
-        query: str,
-        **kwargs: Any,
-    ) -> Any:
-        key = self._cache_key(query)
-
-        if key in self.cache:
-            logger.info("검색 캐시 사용: %s", query)
-            return self.cache[key]
-
-        self.cache[key] = await super()._arun(query, **kwargs)
-        return self.cache[key]
-
-    def _run(
-        self,
-        query: str,
-        **kwargs: Any,
-    ) -> Any:
-        key = self._cache_key(query)
-
-        if key in self.cache:
-            logger.info("검색 캐시 사용: %s", query)
-            return self.cache[key]
-
-        self.cache[key] = super()._run(query, **kwargs)
-        return self.cache[key]
 
 
 class TechAgent(Agent):
