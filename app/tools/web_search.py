@@ -1,0 +1,52 @@
+from typing import Any
+
+from langchain_tavily import TavilySearch
+
+from app.tools.base import BaseTool
+
+
+class WebSearchTool(BaseTool):
+    name: str = "web_search"
+    description: str = "Search the web for information from external sources."
+
+    max_results: int = 5
+    search_depth: str = "advanced"
+
+    def _run(
+        self,
+        query: str,
+        domains: list[str] | None,
+    ) -> Any:
+        print(f"\n[TOOL] Searching web: {query}")
+        tavily = TavilySearch(
+            tavily_api_key=self.settings.tavily_api_key,
+            max_results=self.max_results,
+            search_depth=self.search_depth,
+        )
+
+        return tavily.invoke(
+            {
+                "query": query,
+                "include_domains": domains or [],
+            }
+        )
+
+    async def _arun(
+        self,
+        query: str,
+        domains: list[str] | None,
+    ) -> Any:
+
+        print(f"\n[TOOL] Searching web: {query}")
+        tavily = TavilySearch(
+            tavily_api_key=self.settings.tavily_api_key,
+            max_results=self.max_results,
+            search_depth=self.search_depth,
+        )
+
+        return await tavily.ainvoke(
+            {
+                "query": query,
+                "include_domains": domains or [],
+            }
+        )
