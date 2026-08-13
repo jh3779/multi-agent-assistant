@@ -138,25 +138,61 @@ async function sendMessage(text) {
 }
 
 async function sendToKBO(text) {
-  const processingEl = addProcessingIndicator();
+  let processingEl = addProcessingIndicator();
+  let answerEl = null;
+  let answerText = "";
 
   try {
-    const res = await fetch("/kbo/invoke", {
+    const res = await fetch("/kbo/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: text }),
     });
 
-    if (!res.ok) {
+    if (!res.ok || !res.body) {
       throw new Error(`서버 오류 (${res.status})`);
     }
 
-    const data = await res.json();
-    processingEl.remove();
-    addMessage("assistant", data.answer);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+
+      if (done) break;
+
+      if (processingEl) {
+        processingEl.remove();
+        processingEl = null;
+      }
+
+      const chunk = decoder.decode(value, {
+        stream: true,
+      });
+
+      if (!answerEl) {
+        answerEl = addMessage("assistant", "");
+        answerEl.classList.add("streaming");
+      }
+
+      answerText += chunk;
+      answerEl.innerHTML = renderMarkdown(answerText);
+
+      scrollToBottom();
+    }
+
+    if (answerEl) {
+      answerEl.classList.remove("streaming");
+    }
   } catch (err) {
-    processingEl.remove();
-    addErrorMessage(`답변을 받지 못했습니다: ${err.message}`, () => sendMessage(text));
+    addErrorMessage(
+      `답변을 받지 못했습니다: ${err.message}`,
+      () => sendMessage(text),
+    );
+  } finally {
+    if (processingEl) {
+      processingEl.remove();
+    }
   }
 }
 
