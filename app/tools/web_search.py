@@ -19,7 +19,6 @@ class WebSearchTool(BaseTool):
     def _run(
         self,
         query: str,
-        **kwargs: Any,
     ) -> Any:
         logger.info(f"\n[TOOL] Searching web: {query}")
         tavily = TavilySearch(
@@ -33,7 +32,6 @@ class WebSearchTool(BaseTool):
     async def _arun(
         self,
         query: str,
-        **kwargs: Any,
     ) -> Any:
         logger.info(f"\n[TOOL] Searching web: {query}")
         tavily = TavilySearch(
@@ -53,23 +51,21 @@ class CachedWebSearchTool(WebSearchTool):
     async def _arun(
         self,
         query: str,
-        **kwargs: Any,
     ) -> Any:
         if query in self.cache:
             logger.info("검색 캐시 사용: %s", query)
             return self.cache[query]
 
-        self.cache[query] = await super()._arun(query, **kwargs)
+        self.cache[query] = await super()._arun(query)
         return self.cache[query]
 
     def _run(
         self,
         query: str,
-        **kwargs: Any,
     ) -> Any:
         if query in self.cache:
             logger.info("검색 캐시 사용: %s", query)
             return self.cache[query]
 
-        self.cache[query] = super()._run(query, **kwargs)
+        self.cache[query] = super()._run(query)
         return self.cache[query]
