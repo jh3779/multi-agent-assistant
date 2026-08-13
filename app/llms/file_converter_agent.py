@@ -12,6 +12,7 @@
 # 상태 불일치 탐지)으로 채웠다. validate_tool_result(도구별 결과 검증)는 팀 논의로
 # Agent(ABC)에서 빠졌지만(2026-08-12 app/llms/agent.py 변경), 여전히 유효한 검증이라
 # 이 클래스의 일반 메서드로 남겨뒀다 — astream()이 도구 실행마다 호출한다.
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -30,6 +31,8 @@ from app.llms.agent import Agent
 from app.schemas.file_converter import FileConversionAnswer
 from app.setting import settings
 from app.tools.file_converter.tool import file_converter
+
+logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
     "너는 문서 변환을 도와주는 어시스턴트다. 사용자가 파일 변환을 요청하면 "
@@ -124,6 +127,7 @@ class FileConverterAgent(Agent):
         ).format_messages(question=full_question)
 
         # 1단계: 도구를 쓸지 말지, 몇 번 쓸지 LLM이 스스로 판단(Function Calling)
+        logger.info("[MODEL] Calling model...")
         response = await self.create_workflow().ainvoke({"question": full_question})
         messages.append(response)
 
@@ -138,9 +142,11 @@ class FileConverterAgent(Agent):
             # file_converter.ainvoke(call)에 tool_call 딕셔너리를 통째로 넘기면
             # tool_call_id까지 채워진 ToolMessage(content/artifact 포함)가 바로 나온다.
             for call in tool_calls:
+                logger.info("[TOOL] Executing %s", call["name"])
                 try:
                     tool_message = await file_converter.ainvoke(call)
                 except ToolException as exc:
+                    logger.info("[TOOL] %s failed: %s", call["name"], exc)
                     tool_message = ToolMessage(
                         content=f"변환 실패: {exc}", tool_call_id=call["id"]
                     )
@@ -169,6 +175,10 @@ class FileConverterAgent(Agent):
         # 4단계: 최종 답변이 실제 실행 결과와 모순되지 않는지 검증
         self.memory["answer_validation"] = await self.answer_validation(
             full_question, answer.summary
+        )
+        logger.info(
+            "[VALIDATION] %s",
+            "Passed" if self.memory["answer_validation"].is_valid else "Failed",
         )
 
         # with_structured_output은 완성된 Pydantic 객체를 한 번에 반환하므로(토큰

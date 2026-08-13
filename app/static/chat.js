@@ -8,6 +8,10 @@ const fileInput = document.getElementById("file-input");
 const dropOverlay = document.getElementById("drop-overlay");
 const newChatBtn = document.getElementById("new-chat");
 const agentSelector = document.getElementById("agent-selector");
+const logPanel = document.getElementById("log-panel");
+const logPanelBody = document.getElementById("log-panel-body");
+const logPanelClose = document.getElementById("log-panel-close");
+const logProgress = document.getElementById("log-progress");
 
 const TOOL_LABELS = {
   tech_llm_tool: "Tech LLM Tool",
@@ -386,4 +390,158 @@ window.addEventListener("drop", (e) => {
   dropOverlay.hidden = true;
   const file = e.dataTransfer.files[0];
   handleIncomingFile(file);
+});
+
+// --- 히든 로그 사이드바 ('\' 키로 토글) ---
+//
+// 백엔드 로그 텍스트 자체는 그대로 보여주되(log-panel-body), 그 위에 에이전트별
+// "지금 어느 단계인지"를 요약하는 진행 카드(log-progress)를 얹는다. 카드 상태는
+// 이미 존재하는 로그 메시지의 "[TAG] ..." 접두사를 해석해서만 만든다 — 에이전트
+// 코드(kbo_agent.py/file_converter_agent.py) 자체는 건드리지 않는다.
+
+// agent-selector 버튼(4개)과 1:1로 대응 — 새 에이전트가 백엔드에 연결되면 logger만
+// 채워주면 된다(business/agent4는 아직 로거가 없어 "미연결" 상태로 남는다).
+const AGENT_META = [
+  { key: "file_converter", label: "파일 변환", logger: "app.llms.file_converter_agent" },
+  { key: "kbo", label: "KBO", logger: "app.llms.kbo_agent" },
+  { key: "business", label: "비즈니스", logger: null },
+  { key: "agent4", label: "준비 중", logger: null },
+];
+
+const LOGGER_TO_AGENT = Object.fromEntries(
+  AGENT_META.filter((a) => a.logger).map((a) => [a.logger, a.key])
+);
+
+const agentProgress = {};
+AGENT_META.forEach((a) => {
+  agentProgress[a.key] = { stage: a.logger ? "대기 중" : "미연결", time: null };
+});
+
+// 도구(app.tools.*) 로그는 메시지 자체에 어느 에이전트가 호출했는지 정보가 없다
+// — 현재 구조상 요청이 한 번에 하나씩 순차 처리되므로, 가장 최근에 [MODEL] 단계를
+// 시작한 에이전트가 호출한 도구라고 보는 게 합리적인 근사치다.
+let lastActiveAgentKey = null;
+let logEventSource = null;
+let logEventSourceOpen = false;
+
+function deriveStage(message) {
+  if (message.startsWith("[MODEL]")) return "모델 호출 중";
+  if (message.startsWith("[TOOL]")) {
+    const detail = message.replace(/^\[TOOL\]\s*/, "");
+    return detail.includes("실패") || /failed/i.test(detail)
+      ? `도구 실행 실패 — ${detail}`
+      : `도구 실행 중 — ${detail}`;
+  }
+  if (message.startsWith("[DRAFT]")) return "초안 생성 완료";
+  if (message.startsWith("[EVIDENCE]")) return "근거 수집 중";
+  if (message.startsWith("[VALIDATION] Validating")) return "답변 검증 중";
+  if (message.startsWith("[VALIDATION] Passed")) return "검증 통과 — 완료";
+  if (message.startsWith("[VALIDATION] Failed")) return "검증 실패 — 보정 필요";
+  if (message.startsWith("[CORRECTION] Correcting")) return "답변 보정 중";
+  if (message.startsWith("[CORRECTION] Corrected")) return "보정 완료";
+  if (message.startsWith("[TIME]")) return "완료";
+  return null;
+}
+
+function renderProgress() {
+  logProgress.innerHTML = "";
+  for (const meta of AGENT_META) {
+    const state = agentProgress[meta.key];
+    const card = document.createElement("div");
+    card.className = "log-progress-card";
+    if (!meta.logger) {
+      card.classList.add("disabled");
+    } else if (meta.key === lastActiveAgentKey && state.stage !== "대기 중") {
+      card.classList.add("active");
+    } else {
+      card.classList.add("idle");
+    }
+
+    const head = document.createElement("div");
+    head.className = "log-progress-card-head";
+    const nameEl = document.createElement("span");
+    nameEl.textContent = meta.label;
+    head.appendChild(nameEl);
+    if (state.time) {
+      const timeEl = document.createElement("span");
+      timeEl.className = "log-progress-card-time";
+      timeEl.textContent = state.time;
+      head.appendChild(timeEl);
+    }
+    card.appendChild(head);
+
+    const stageEl = document.createElement("div");
+    stageEl.className = "log-progress-card-stage";
+    stageEl.textContent = state.stage;
+    card.appendChild(stageEl);
+
+    logProgress.appendChild(card);
+  }
+}
+
+function appendLogEntry(entry) {
+  const line = document.createElement("div");
+  line.className = `log-line log-${(entry.level || "").toLowerCase()}`;
+  line.textContent = `[${entry.time}] ${entry.level} ${entry.logger} — ${entry.message}`;
+  logPanelBody.appendChild(line);
+  logPanelBody.scrollTop = logPanelBody.scrollHeight;
+
+  const agentKey = LOGGER_TO_AGENT[entry.logger];
+  if (agentKey) {
+    lastActiveAgentKey = agentKey;
+  }
+  const targetKey = agentKey || lastActiveAgentKey;
+  if (!targetKey) return;
+
+  const stage = deriveStage(entry.message);
+  if (stage) {
+    agentProgress[targetKey] = { stage, time: entry.time };
+    renderProgress();
+  }
+}
+
+function resetProgress() {
+  AGENT_META.forEach((a) => {
+    agentProgress[a.key] = { stage: a.logger ? "대기 중" : "미연결", time: null };
+  });
+  lastActiveAgentKey = null;
+  renderProgress();
+}
+
+function openLogPanel() {
+  logPanel.hidden = false;
+  if (logEventSourceOpen) return;
+  logEventSourceOpen = true;
+  logPanelBody.innerHTML = "";
+  resetProgress();
+  logEventSource = new EventSource("/logs/stream");
+  logEventSource.onmessage = (e) => {
+    appendLogEntry(JSON.parse(e.data));
+  };
+}
+
+function closeLogPanel() {
+  logPanel.hidden = true;
+  if (logEventSource) {
+    logEventSource.close();
+    logEventSource = null;
+  }
+  logEventSourceOpen = false;
+}
+
+renderProgress();
+logPanelClose.addEventListener("click", closeLogPanel);
+
+window.addEventListener("keydown", (e) => {
+  if (e.key !== "\\") return;
+  // 메시지 입력창에 타이핑 중이면 평범한 백슬래시 문자로 취급 — 히든 키는
+  // 입력창 밖에서 눌렀을 때만 동작한다.
+  const activeTag = document.activeElement && document.activeElement.tagName;
+  if (activeTag === "TEXTAREA" || activeTag === "INPUT") return;
+  e.preventDefault();
+  if (logPanel.hidden) {
+    openLogPanel();
+  } else {
+    closeLogPanel();
+  }
 });
