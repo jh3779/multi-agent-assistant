@@ -53,21 +53,23 @@ class CachedWebSearchTool(WebSearchTool):
     async def _arun(
         self,
         query: str,
+        **kwargs: Any,
     ) -> Any:
         if query in self.cache:
             logger.info("검색 캐시 사용: %s", query)
             return self.cache[query]
 
-        self.cache[query] = await super()._arun(query)
+        self.cache[query] = await super()._arun(query, **kwargs)
         return self.cache[query]
 
     def _run(
         self,
         query: str,
+        **kwargs: Any,
     ) -> Any:
         if query in self.cache:
             logger.info("검색 캐시 사용: %s", query)
             return self.cache[query]
 
-        self.cache[query] = super()._run(query)
+        self.cache[query] = super()._run(query, **kwargs)
         return self.cache[query]

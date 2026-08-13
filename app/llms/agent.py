@@ -56,7 +56,10 @@ class Agent(ABC):
         """LLM의 최종 답변을 평가한다."""
 
     @abstractmethod
-    async def astream(self, question: str, *args, **kwargs) -> AsyncIterator[Any]:
+    # 구현체는 async generator이므로 반환형이 AsyncIterator 자체다.
+    # `async def`로 선언하면 Coroutine[..., AsyncIterator]가 되어 모든 구현
+    # 클래스에서 시그니처 불일치가 난다.
+    def astream(self, question: str, *args, **kwargs) -> AsyncIterator[Any]:
         """도구 실행과 답변 생성을 처리하며 진행 상황을 스트리밍한다.
 
         전송 형식(SSE 등) 변환은 이 결과를 사용하는 쪽에서 담당한다.

@@ -69,8 +69,9 @@ def collect_evidence(
     Collect tool outputs used as evidence.
     """
 
+    # message.content는 str뿐 아니라 list[dict|str]일 수도 있어 join이 깨진다.
     evidence = [
-        message.content for message in messages if isinstance(message, ToolMessage)
+        str(message.content) for message in messages if isinstance(message, ToolMessage)
     ]
 
     return "\n\n".join(evidence)
