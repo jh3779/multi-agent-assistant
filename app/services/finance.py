@@ -1,4 +1,3 @@
-import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -29,9 +28,7 @@ class FinanceService:
         raw 줄바꿈이 들어가면 SSE 프레임이 그 자리에서 잘린다.
         """
 
-        payload = json.dumps(event.data, ensure_ascii=False)
-
-        return f"event: {event.type}\ndata: {payload}\n\n"
+        return f"data: {event.model_dump_json()}\n\n"
 
     async def ask(self, question: str) -> FinanceAnswerResponse:
         """스트리밍 없이 완성된 답변을 한 번에 만든다."""
@@ -58,9 +55,7 @@ class FinanceService:
                     logger.info("클라이언트 연결 종료로 스트리밍 중단")
                     return
 
-                yield self.to_sse(
-                    FinanceStreamEvent(type="delta", data={"text": chunk})
-                )
+                yield self.to_sse(FinanceStreamEvent(type="answer", text=chunk))
 
             yield self.to_sse(FinanceStreamEvent(type="done"))
 
@@ -72,6 +67,6 @@ class FinanceService:
             yield self.to_sse(
                 FinanceStreamEvent(
                     type="error",
-                    data={"message": "답변 생성 중 오류가 발생했습니다."},
+                    text="답변 생성 중 오류가 발생했습니다.",
                 )
             )

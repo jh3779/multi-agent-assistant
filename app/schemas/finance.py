@@ -5,7 +5,7 @@
 뒷부분은 HTTP 요청·응답과 SSE 이벤트 스키마다.
 """
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -69,11 +69,15 @@ class FinanceAnswerResponse(BaseModel):
 class FinanceStreamEvent(BaseModel):
     """SSE로 내보낼 단일 이벤트.
 
-    delta: 최종 답변 조각
-    done:  스트림 종료
-    error: 처리 중 발생한 오류
+    /chat·/kbo와 같은 한 줄 "data: {type, text}" 형식을 쓴다.
+    app/static/chat.js의 sendToFinance가 이 형식을 파싱한다.
+    (/tech만 "event: <type>\\ndata: <json>" 두 줄 구성이라 형식이 다르다.)
+
+    answer: 최종 답변 조각
+    done:   스트림 종료
+    error:  처리 중 발생한 오류
     """
 
-    type: Literal["delta", "done", "error"]
+    type: Literal["answer", "done", "error"]
 
-    data: dict[str, Any] = Field(default_factory=dict)
+    text: str = ""

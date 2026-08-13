@@ -162,7 +162,7 @@ async function sendToKBO(text) {
 
 // /finance/stream은 GET + 쿼리스트링(브라우저 EventSource가 GET만 지원해서)이고,
 // SSE 프레임은 /chat·/kbo와 같은 한 줄 "data: {type, text}" 형식이다
-// (type: answer/done/error, app/schemas/api.py의 StreamEvent 참고).
+// (type: answer/done/error, app/schemas/finance.py의 FinanceStreamEvent 참고).
 async function sendToFinance(text) {
   let processingEl = addProcessingIndicator();
   let answerEl = null;
