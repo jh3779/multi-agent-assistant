@@ -22,7 +22,7 @@ from app.tools.finance import (
     GetInterestRateTool,
     GetStockPriceTool,
 )
-from app.tools.search import WebSearchTool
+from app.tools.web_search import WebSearchTool
 
 # 두 루프 모두 상한이 필요하다. 평가자는 생각보다 자주 거절하고,
 # 도구 호출도 모델이 같은 도구를 반복 호출하며 맴돌 수 있다.
