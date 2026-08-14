@@ -1,0 +1,666 @@
+:root {
+  /* 팔레트 — 아래 값들만 바꾸면 전체 화면에 반영됨. 나머지 CSS는 전부 이 변수만 참조함 */
+
+  /* 배경/전경 — 뉴트럴 그레이(zinc) 계열. 기존 slate(파란 계열)에서 색조만 교체(2026-08-12) */
+  --color-background: #18181b;
+  --color-foreground: #fafafa;
+
+  /* 표면(카드/입력창/버튼 배경) */
+  --color-primary: #27272a;
+  --color-on-primary: #ffffff;
+  --color-secondary: #3f3f46;
+  --color-muted: #2f2f34;
+  --color-muted-foreground: #a1a1aa;
+  --color-border: #52525b;
+
+  /* 강조색(포인트 컬러 — 브랜드 점, 포커스 링, 전송 버튼, 스트리밍 커서 등). 배경 톤 교체와 무관하게 유지 */
+  --color-accent: #22c55e;
+  --color-on-accent: #06210f; /* 강조색 배경 위에 올라가는 텍스트색(밝은 초록 위 어두운 글자) */
+
+  /* 상태색(에러) */
+  --color-destructive: #ef4444;
+  --color-destructive-bg: rgba(239, 68, 68, 0.12); /* --color-destructive와 같은 색의 옅은 배경 */
+
+  /* 오버레이 배경(파일 드래그 시 전체 화면 덮개) */
+  --overlay-backdrop: rgba(24, 24, 27, 0.85); /* --color-background와 같은 색의 반투명 버전 */
+
+  --radius: 10px;
+  --radius-pill: 999px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+* {
+  scrollbar-color: var(--color-border) var(--color-background);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--color-background);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.layout {
+  display: flex;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* Header */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.brand-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-muted-foreground);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    border-color 200ms,
+    color 200ms;
+}
+
+.btn-ghost:hover {
+  border-color: var(--color-foreground);
+  color: var(--color-foreground);
+}
+
+.btn-ghost:active {
+  transform: scale(0.98);
+}
+
+/* Chat log */
+.chat-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.empty-state {
+  margin: auto;
+  text-align: center;
+  color: var(--color-muted-foreground);
+}
+
+.empty-state p:first-child {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-foreground);
+  margin: 0 0 6px;
+}
+
+.empty-state-sub {
+  margin: 0;
+  font-size: 14px;
+}
+
+.message {
+  max-width: 75%;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message.user {
+  align-self: flex-end;
+  background: var(--color-secondary);
+  color: var(--color-foreground);
+}
+
+.message.assistant {
+  align-self: flex-start;
+  background: var(--color-muted);
+  color: var(--color-foreground);
+}
+
+/* 마크다운 렌더링(marked + DOMPurify, app/static/chat.js의 renderMarkdown) 스타일 */
+.message.assistant > :first-child {
+  margin-top: 0;
+}
+
+.message.assistant > :last-child {
+  margin-bottom: 0;
+}
+
+.message.assistant h1,
+.message.assistant h2,
+.message.assistant h3 {
+  margin: 16px 0 8px;
+  font-size: 1.05em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.message.assistant p {
+  margin: 8px 0;
+}
+
+.message.assistant ul,
+.message.assistant ol {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.message.assistant li {
+  margin: 4px 0;
+}
+
+.message.assistant a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message.assistant code {
+  background: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.message.assistant pre {
+  margin: 8px 0;
+  padding: 12px 14px;
+  background: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.message.assistant pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.message.assistant blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--color-border);
+  color: var(--color-muted-foreground);
+}
+
+.message.assistant table {
+  margin: 8px 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92em;
+}
+
+.message.assistant th,
+.message.assistant td {
+  border: 1px solid var(--color-border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.message.assistant th {
+  background: var(--color-primary);
+}
+
+.message.assistant hr {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.message.assistant.streaming::after {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  margin-left: 2px;
+  background: var(--color-accent);
+  vertical-align: text-bottom;
+  animation: blink 900ms step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.tool-status {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  color: var(--color-muted-foreground);
+  font-size: 13px;
+}
+
+.tool-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.message.error {
+  align-self: stretch;
+  background: var(--color-destructive-bg);
+  border: 1px solid var(--color-destructive);
+  color: var(--color-foreground);
+}
+
+.message.error .retry-btn {
+  margin-top: 8px;
+  background: var(--color-destructive);
+  color: var(--color-on-primary);
+  border: none;
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.message.error .retry-btn:active {
+  transform: scale(0.98);
+}
+
+.file-picker-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-picker select {
+  background: var(--color-primary);
+  color: var(--color-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.file-result {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--color-muted);
+  border: 1px solid var(--color-border);
+}
+
+.file-result a {
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.file-result a:hover {
+  text-decoration: underline;
+}
+
+/* Drop overlay */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-backdrop);
+  border: 2px dashed var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.drop-overlay[hidden] {
+  display: none;
+}
+
+/* Agent selector */
+.agent-selector {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.agent-btn {
+  background: var(--color-primary);
+  color: var(--color-muted-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 150ms,
+    color 150ms,
+    background 150ms;
+}
+
+.agent-btn:hover:not(:disabled) {
+  border-color: var(--color-foreground);
+  color: var(--color-foreground);
+}
+
+.agent-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.agent-btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+.agent-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Composer */
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 16px 0 24px;
+  flex-shrink: 0;
+}
+
+.message-input {
+  flex: 1;
+  resize: none;
+  background: var(--color-primary);
+  color: var(--color-foreground);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 15px;
+  max-height: 160px;
+}
+
+.message-input::placeholder {
+  color: var(--color-muted-foreground);
+}
+
+.message-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-icon,
+.btn-send {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  background: var(--color-primary);
+  color: var(--color-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 150ms;
+}
+
+.btn-icon:hover,
+.btn-send:hover {
+  border-color: var(--color-foreground);
+}
+
+.btn-icon:active,
+.btn-send:active {
+  transform: scale(0.96);
+}
+
+.btn-send {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.btn-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message.assistant.streaming::after,
+  .tool-status .dot {
+    animation: none;
+  }
+}
+
+/* Log panel — 화면 반반 분할 사이드바(히든 키 '\'로 토글, 다이얼로그 아님) */
+.log-panel {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-width: 50%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background);
+  border-left: 1px solid var(--color-border);
+}
+
+.log-panel[hidden] {
+  display: none;
+}
+
+.log-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 64px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-foreground);
+  flex-shrink: 0;
+}
+
+.log-panel-header #log-panel-close {
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  color: var(--color-muted-foreground);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.log-panel-header #log-panel-close:hover {
+  color: var(--color-foreground);
+}
+
+/* 에이전트별 작업진행 방향 */
+.log-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  max-height: 45%;
+  overflow-y: auto;
+}
+
+.log-progress-card {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  transition: border-color 200ms;
+}
+
+.log-progress-card.idle {
+  opacity: 0.55;
+}
+
+.log-progress-card.disabled {
+  opacity: 0.35;
+}
+
+.log-progress-card.active {
+  border-color: var(--color-accent);
+}
+
+.log-progress-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.log-progress-card-time {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-muted-foreground);
+}
+
+.log-progress-card-stage {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+}
+
+.log-progress-card.active .log-progress-card-stage {
+  color: var(--color-accent);
+}
+
+/* 원문 로그 텍스트 */
+.log-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--color-muted-foreground);
+}
+
+.log-line .log-time {
+  color: var(--color-border);
+}
+
+.log-line.log-warning {
+  color: #f59e0b;
+}
+
+.log-line.log-error {
+  color: var(--color-destructive);
+}

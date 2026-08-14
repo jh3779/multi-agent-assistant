@@ -6,16 +6,27 @@ readme = "README.md"
 authors = []
 requires-python = ">=3.14"
 dependencies = [
+    "fastapi[standard]>=0.141.1",
     "langchain",
     "langchain-openai>=1.4.2",
+    "langchain-tavily>=0.2.18",
     "langsmith>=0.10.17",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.15.0",
+    "pypandoc",
+    "python-dotenv",
+    "python-multipart",
     "requests",
+    "uvicorn[standard]>=0.52.1",
+    "yfinance>=1.5.2",
 ]
 
 [tool.uv]
 package = false
+
+# package = false라 pyrefly가 import 루트를 src/로 잘못 추론한다. 저장소 루트로 지정.
+[tool.pyrefly]
+search-path = ["."]
 
 [dependency-groups]
 dev = [
@@ -23,3 +34,9 @@ dev = [
     "pyrefly>=1.2.0",
     "ruff>=0.14.0",
 ]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.format]
+quote-style = "double"

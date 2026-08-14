@@ -39,6 +39,14 @@ app/
 - **팀원 4명**: `app/services/categories.py`의 `handle_정치()`/`handle_경제()`/`handle_it()`/`handle_스포츠()` 각 1개씩 담당
 - **테스트·QA·발표**: 엣지케이스 테스트 + 데모 스크립트
 
+## 도구 (Tools)
+
+- `app/tools/file_converter/` — 문서 포맷 변환 도구(pandoc 기반). `POST /tools/file-converter/convert`(파일 업로드 + `target_format`), `GET /tools/file-converter/formats`(지원 포맷 목록)
+  - 지원 포맷: docx, html, md, odt, rtf, pptx, epub, rst, txt
+  - **PDF는 지원하지 않음** — pandoc이 PDF를 입력으로 읽지 못하고(리더 없음), 출력하려면 LaTeX 등 별도 엔진이 추가로 필요해 스코프에서 제외
+  - 로컬 실행 전 `brew install pandoc` 필요(시스템 바이너리)
+  - 사용 예시(curl, Python 호출 등)는 [docs/07_usage.md](docs/07_usage.md) 참고
+
 ## 설계 문서
 
 - [docs/prd.md](docs/prd.md) — 한 문장 정의, MVP 범위, 기능/비기능 요구사항, 데이터 흐름(mermaid), 리스크
@@ -47,6 +55,7 @@ app/
 - [docs/presentation.md](docs/presentation.md) — 미니프로젝트 발표 준비 자료
 - [docs/branching.md](docs/branching.md) — 브랜치 규칙, PR·리뷰 흐름, AI 협업 시 유의사항
 - [docs/multi-agent.md](docs/multi-agent.md) — (초안, 스프린트 범위 밖) 메인/서브 에이전트 오케스트레이션 패턴 검토 메모
+- [docs/07_usage.md](docs/07_usage.md) — file-converter·채팅 UI 사용 설명(curl 예시, Python 호출법)
 
 ## 필수요건 6종 체크리스트 (Day5 교안 기준)
 

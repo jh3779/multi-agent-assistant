@@ -1,4 +1,4 @@
-from typing import ClassVar, Any
+from typing import ClassVar
 
 from langchain_core.tools import BaseTool as LangChainBaseTool
 
