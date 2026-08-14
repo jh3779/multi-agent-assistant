@@ -201,11 +201,31 @@ async function sendToKBO(text) {
   }
 }
 
-// /finance/stream은 GET + 쿼리스트링이고,
-// /tech/stream과 같은 "event: <type>\ndata: <json>" 두 줄 SSE
-// 프레임이다(type: delta/done/error, app/schemas/finance.py의 FinanceStreamEvent
-// 참고). 원래는 /chat·/kbo처럼 한 줄짜리 "data: {type 포함}" 형식이었는데,
-// 팀원이 tech와 통일시키면서 바뀌었다.
+// SSE 프레임 하나에서 (type, data)를 뽑아낸다 — 두 가지 형식을 모두 지원:
+//   1) 한 줄:  "data: {type, text}"            → type은 JSON 안에서 꺼냄
+//   2) 두 줄:  "event: <type>\ndata: <json>"   → type은 event: 줄에서 꺼냄
+// 금융 SSE 계약이 두 형식 사이를 두 번 오간 이력이 있어서(한 줄 → 두 줄 → 다시
+// 한 줄), 백엔드가 어느 쪽으로 바뀌어도 프론트가 깨지지 않도록 둘 다 받는다.
+function parseSseFrame(part) {
+  let eventType = null;
+  let dataLine = null;
+  for (const line of part.split("\n")) {
+    if (line.startsWith("event:")) eventType = line.slice(6).trim();
+    else if (line.startsWith("data:")) dataLine = line.slice(5).trim();
+  }
+  if (dataLine === null) return null;
+  let data;
+  try {
+    data = JSON.parse(dataLine);
+  } catch {
+    return null;
+  }
+  return { type: eventType || data.type || null, data };
+}
+
+// /finance/stream은 GET + 쿼리스트링. 이벤트 타입도 시기에 따라
+// answer(한 줄 시절)와 delta(두 줄 시절)가 오갔어서 둘 다 답변 조각으로
+// 취급한다. 텍스트 필드도 text/message 어느 쪽이든 받는다.
 async function sendToFinance(text) {
   let processingEl = addProcessingIndicator();
   let answerEl = null;
@@ -233,35 +253,30 @@ async function sendToFinance(text) {
       buffer = parts.pop();
 
       for (const part of parts) {
-        let type = null;
-        let dataLine = null;
-        for (const line of part.split("\n")) {
-          if (line.startsWith("event:")) type = line.slice(6).trim();
-          else if (line.startsWith("data:")) dataLine = line.slice(5).trim();
-        }
-        if (!type || dataLine === null) continue;
-        const data = JSON.parse(dataLine);
+        const frame = parseSseFrame(part);
+        if (!frame || !frame.type) continue;
+        const payloadText = frame.data.text ?? frame.data.message ?? "";
 
         if (processingEl) {
           processingEl.remove();
           processingEl = null;
         }
 
-        if (type === "delta") {
+        if (frame.type === "answer" || frame.type === "delta") {
           if (!answerEl) {
             answerEl = addMessage("assistant", "");
             answerEl.classList.add("streaming");
           }
-          answerText += data.text;
+          answerText += payloadText;
           answerEl.innerHTML = renderMarkdown(answerText);
           scrollToBottom();
-        } else if (type === "done") {
+        } else if (frame.type === "done" || frame.type === "result") {
           if (answerEl) answerEl.classList.remove("streaming");
           pushSyntheticLog("business_agent", "완료");
-        } else if (type === "error") {
-          pushSyntheticLog("business_agent", `종료 — error: ${data.message || ""}`);
+        } else if (frame.type === "error") {
+          pushSyntheticLog("business_agent", `종료 — error: ${payloadText}`);
           addErrorMessage(
-            data.message || "답변을 받지 못했습니다.",
+            payloadText || "답변을 받지 못했습니다.",
             () => sendMessage(text)
           );
         }
@@ -307,14 +322,10 @@ async function sendToTech(text) {
       buffer = parts.pop();
 
       for (const part of parts) {
-        let type = null;
-        let dataLine = null;
-        for (const line of part.split("\n")) {
-          if (line.startsWith("event:")) type = line.slice(6).trim();
-          else if (line.startsWith("data:")) dataLine = line.slice(5).trim();
-        }
-        if (!type || dataLine === null) continue;
-        const data = JSON.parse(dataLine);
+        const frame = parseSseFrame(part);
+        if (!frame || !frame.type) continue;
+        const type = frame.type;
+        const data = frame.data;
 
         if (processingEl) {
           processingEl.remove();
