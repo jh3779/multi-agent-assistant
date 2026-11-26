@@ -1,66 +1,87 @@
-# 아키텍처 — 카테고리 라우팅 설계 & 작업 분할 전략
+# 아키텍처 — 독립 에이전트를 하나의 FastAPI 앱으로 묶는 구조
 
-관련 문서: [prd.md](prd.md)
+관련 문서: [prd.md](prd.md) · [navigation.md](navigation.md) · [multi-agent.md](multi-agent.md)(채택하지 않은 대안)
 
-## 카테고리 라우팅 설계 (도구 선택 + 개별 분기 처리)
+> 이 문서는 현재 `main`의 코드 기준입니다. 초기 "뉴스봇"의 카테고리 라우팅 설계는 주제와 함께 폐기되어 이 문서에서 제거했습니다(경과: [prd.md](prd.md) 2절).
 
-FR-001("카테고리 추출")의 실제 구현 방식. 팀 논의를 거쳐 다음으로 정리됨(2026-08-07):
+## 한눈에 보기
 
-**라우팅은 별도 분류 호출이 아니라 LLM의 도구 선택(Function Calling)으로 하고, 선택된 도구에 따라 분기해 카테고리별로 개별 처리한다.**
-
-- **1단계 — 도구 선택(라우팅)**: 카테고리 4종(정치/경제/IT/스포츠, "기타" 없음)을 각각 `@tool`로 등록해 `bind_tools`로 LLM에 노출. 사용자 질문을 넣으면 LLM이 어떤 도구를 호출할지 스스로 선택 — 이 선택 자체가 라우팅 결정이며, 별도의 분류 전용 LLM 호출이 필요 없음.
-- **2단계 — 분기 후 개별 처리**: 반환된 `tool_calls`를 순회하며 `if tc["name"] == "..."` 형태로 분기, 각 분기는 카테고리별로 **개별 구현된 처리 로직**(`app/services/categories.py`)을 실행.
+중앙 오케스트레이터(Main LLM)를 두지 않고, 팀원 각자가 독립 에이전트를 만들어 라우터로 등록합니다. 어떤 에이전트로 보낼지는 서버가 아니라 **채팅 UI의 에이전트 선택 버튼**([app/static/index.html](../app/static/index.html))이 정합니다.
 
 ```mermaid
-flowchart TD
-    A[사용자 질문 입력] --> B["LLM 도구 선택<br/>(bind_tools, Function Calling)"]
-    B -->|tool_calls 반환| R{"if tc['name'] 분기"}
-    B -->|도구 미선택| F["Fallback<br/>재질문 또는 전체 카테고리 안내"]
-    R -->|정치 도구| C1["handle_politics()<br/>개별 구현"]
-    R -->|경제 도구| C2["handle_economy()<br/>개별 구현"]
-    R -->|IT 도구| C3["handle_it()<br/>개별 구현"]
-    R -->|스포츠 도구| C4["handle_sports()<br/>개별 구현"]
-    C1 --> D["네이버 뉴스 API 호출<br/>(카테고리별 검색 파라미터,<br/>오늘자 필터)"]
-    C2 --> D
-    C3 --> D
-    C4 --> D
-    D --> E["중복 기사 제거<br/>(제목 유사도 기준)"]
-    E --> G[상위 5건 선정]
-    G --> H["AI 요약<br/>(Pydantic NewsItem 구조화)"]
-    H --> I["TOP5 응답<br/>(제목·언론사·요약·원문링크)"]
+flowchart LR
+    UI["채팅 UI<br/>(app/static)"] -->|파일 변환| C["POST /chat"]
+    UI -->|KBO| K["POST /kbo/stream"]
+    UI -->|Tech| T["POST /tech/stream"]
+    UI -->|금융| F["GET /finance/stream"]
+    UI -->|드래그 앤 드롭| FC["POST /tools/file-converter/convert"]
+    UI -->|진행 로그| L["GET /logs/stream"]
+
+    C --> CS[ChatService] --> FA[FileConverterAgent]
+    K --> KS[KBOService] --> KA[KBOAgent]
+    T --> TS[TechService] --> TA[TechAgent]
+    F --> FS[FinanceService] --> BA[BusinessAgent]
+    FC --> CV["converter (pandoc)"]
+    FA --> CV
 ```
 
-### 설계 결정 및 근거
+## 계층
+
+각 요청은 같은 3계층을 지납니다. 계층을 나눈 이유는 "라우팅 문제인가, 로직 문제인가"를 빠르게 좁히기 위해서입니다([course-reference.md](course-reference.md) 2절).
+
+| 계층 | 위치 | 책임 | 하지 않는 일 |
+|---|---|---|---|
+| 라우터 | [app/routers/](../app/routers/) | 요청 검증, 서비스 호출, `StreamingResponse` 반환 | LLM 호출, 이벤트 조립 |
+| 서비스 | [app/services/](../app/services/) | 에이전트 호출, SSE 이벤트·응답 조립 | HTTP 세부 사항 |
+| 에이전트 | [app/llms/](../app/llms/) | 프롬프트·도구 호출·검증 파이프라인 | 전송 형식(SSE 등) 변환 |
+
+의존성은 [app/dependencies.py](../app/dependencies.py)가 FastAPI `Depends`로 주입합니다. 상태를 인스턴스에 들고 있는 에이전트(`BusinessAgent` 등)는 요청마다 새로 만듭니다.
+
+## 공통 베이스: `Agent(ABC)`
+
+[app/llms/agent.py](../app/llms/agent.py)의 추상 메서드는 다섯 개입니다. 각 에이전트는 이것만 지키고, 내부 파이프라인은 자유롭게 구성합니다.
+
+| 메서드 | 역할 |
+|---|---|
+| `create_system_prompt` / `create_human_prompt` | LLM의 역할·입력 형식 정의 |
+| `create_workflow` | 프롬프트·모델·도구·검증을 조합한 실행 파이프라인 |
+| `answer_validation` | 최종 답변 평가 |
+| `astream` | 진행 상황을 `AsyncIterator`로 스트리밍(전송 형식 변환은 호출 측 담당) |
+
+도구는 [app/tools/base.py](../app/tools/base.py)의 `BaseTool`(LangChain `BaseTool` + 공용 설정)을 상속합니다.
+
+## 에이전트별 파이프라인
+
+| 에이전트 | 도구 | 파이프라인 | 구조화 출력 |
+|---|---|---|---|
+| `FileConverterAgent` | `file_converter` | 프롬프트 → 도구 선택(Function Calling) → 도구 실행 → 도구 결과 검증 → 답변 생성 → 답변 검증 | `FileConversionAnswer`, `ToolResultCheck`, `AnswerCheck` |
+| `KBOAgent` | `WebSearchTool`(KBO 도메인 한정), `DateTimeTool` | 도구 자율 호출(근거 수집) → 초안 → 검증 LLM → 불합격 시 근거 기반 수정 | `ValidationResult` |
+| `TechAgent` | `CachedWebSearchTool` | `create_agent`로 검색·답변 → 출처·품질 검증 | `TechAgentResponse` |
+| `BusinessAgent` | 주가·환율·금리 도구, `WebSearchTool` | `ToolSelectAgent` → `AnswerWriterAgent` → `AnswerEvaluatorAgent`, 불합격 시 재작성 루프 | `AnswerEvaluation` |
+
+LLM은 모두 `gpt-4o-mini`, `temperature=0.0`입니다([app/dependencies.py](../app/dependencies.py)).
+
+## 스트리밍 형식
+
+에이전트별로 형식이 다릅니다. 프론트([app/static/chat.js](../app/static/chat.js))가 에이전트마다 파서를 따로 둡니다.
+
+| 엔드포인트 | 응답 형식 | 이벤트 |
+|---|---|---|
+| `POST /chat` | `text/event-stream`, `data: {JSON}` | `tool_start` · `tool_end` · `answer_chunk` · `done` |
+| `POST /tech/stream` | `text/event-stream`, `event: {type}` + `data: {JSON}` 두 줄 | `status` · `delta` · `result` · `error` |
+| `GET /finance/stream` | `text/event-stream`, `data: {JSON}` 한 줄(타입은 JSON 안) | `answer` · `done` · `error` |
+| `POST /kbo/stream` | `text/plain` 청크 스트림(SSE 아님) | — |
+| `GET /logs/stream` | `text/event-stream` | 서버 로그 한 줄씩 |
+
+`/chat`은 `with_structured_output`이 완성된 객체를 한 번에 돌려주므로 `answer_chunk`가 통째로 한 번 옵니다. 이벤트 상세는 [app/services/chat.py](../app/services/chat.py), [app/schemas/tech.py](../app/schemas/tech.py), [app/routers/finance.py](../app/routers/finance.py)에 있습니다.
+
+## 설계 결정과 근거
 
 | 결정 | 이유 |
 |---|---|
-| 라우팅을 별도 분류 호출 대신 LLM 도구 선택(Function Calling)으로 수행 | `bind_tools` 한 번으로 "카테고리 결정 + 실행 인자(검색어) 추출"을 동시에 얻어 LLM 호출 횟수를 줄임 |
-| 선택된 도구는 `if`/`elif`(`tc["name"]` 분기)로 처리하고, 각 분기는 카테고리별 개별 구현 | 도구 실행 루프에서 어떤 도구가 호출됐는지 확인해 분기하고, 카테고리마다 다른 로직(검색 파라미터·후처리)을 자유롭게 둠 — 공통 파라미터화 함수로 묶지 않아 카테고리별 확장에 유연함 |
-| 도구 미선택 시 Fallback 경로 필수 | "이번 주 이슈 정리해줘"처럼 카테고리 경계가 애매한 질문에서 오분류·무응답 방지 |
-| "기타" 카테고리는 두지 않음(팀 결정) | 도구 목록은 4개 고정 카테고리만 등록 — 별도 `search_other_news` 도구를 만들지 않고, 도구 미선택 시엔 위 Fallback 경로로만 처리(기타 뉴스는 서비스 범위에서 제외) |
-
-## 작업 분할 전략
-
-**카테고리별로 서비스 전체(검색+중복제거+요약+응답)를 4벌 따로 만들어 "나중에 취합"하는 방식은 기각.**
-
-이유:
-- 공통 로직(중복제거·요약·FastAPI·Pydantic)이 4벌로 중복되고 서로 다른 스타일로 갈라짐
-- 필수요건 6종(FastAPI·Pydantic·SSE 등)이 카테고리 무관하게 서비스 전체에 하나씩 있어야 하는데, 4벌로 나누면 누가 책임지는지 애매해짐
-- 통합이 마지막(8/14, 발표 전날/당일)에 몰리는 건 5일짜리 스프린트에 리스크가 큼
-- 8/14 "무작위 팀원 지목"(전원이 데이터 흐름 전체를 설명할 수 있어야 함) 요건도, 각자 자기 카테고리만 알면 통과하기 어려움
-
-**대신 다음 순서로 진행**:
-
-1. **구현 리드가 8/10~11에 공통 스켈레톤 선구축** — 도구 등록/분기 껍데기(`app/tools/`, `app/routers/`), 중복제거(`app/services/dedup.py`), 요약(`app/services/summarize.py`), FastAPI 라우팅(`app/main.py`), Pydantic 스키마(`app/schemas/news.py`)
-2. 스켈레톤 완성 후 `handle_정치()`/`handle_경제()`/`handle_it()`/`handle_스포츠()`(`app/services/categories.py`) **개별 함수 본문만** 4명이 나눠서 채움 — 이 조각은 실제로 병렬화하기 좋음. **어떤 카테고리를 맡을지는 팀장이 배정하지 않고 각자 정한다(자율 선택, 2026-08-07 결정)** — 먼저 정하는 사람이 가져가고, 겹치면 그때 조율
-3. 빅뱅 통합 금지 — 매일 오후 스탠드업에서 조금씩 취합
-
-## 역할 분담 (가제 — 실제 팀원 배정 전 초안)
-
-| 역할 | 담당 | 주로 건드리는 폴더 |
-|---|---|---|
-| 팀장 | 카테고리 범위 결정·일정 조율·발표 총괄 | — |
-| 구현 리드 | 네이버 뉴스 API 연동, LCEL 체인 구조, 엔드포인트 배선, 공통 스켈레톤 선구축 | `app/main.py`, `app/routers/`, `app/services/naver_news.py`, `app/services/dedup.py`, `app/tools/` |
-| 프롬프트·기획 | 카테고리 추출·요약 프롬프트(RCIF), Pydantic 스키마 설계 | `app/services/summarize.py`, `app/schemas/news.py` |
-| 테스트·QA·발표 | 엣지케이스(기사 0건·중복 과다·모호한 카테고리) 테스트, 데모·발표 준비 | `tests/` |
-| 팀원 4명 공통 | `handle_정치()`/`handle_경제()`/`handle_it()`/`handle_스포츠()` 각 1개씩 담당(스켈레톤 완성 후, **담당 카테고리는 팀장 배정이 아니라 각자 자율 선택**) | `app/services/categories.py` |
+| 중앙 오케스트레이터 폐기, 에이전트 독립 | 한 사람이 막혀도 다른 사람이 막히지 않게 하려는 팀 결정. 라우팅은 필요해지면 나중에 얹는다 — 검토했던 패턴은 [multi-agent.md](multi-agent.md) |
+| 에이전트 선택은 UI 버튼 | 서버 측 라우팅 없이 에이전트를 독립 배포 가능하게 유지 |
+| 공통 규약은 `Agent(ABC)`와 `BaseTool`만 | 최소한의 일관성만 강제하고 내부 구현의 자율성을 남김 |
+| 무상태·멀티턴 미지원 | 5일 스프린트 범위 통제([06_open_questions.md](06_open_questions.md) DEC-001) |
+| 프론트는 빌드 도구 없는 순수 HTML/CSS/JS | 구현 속도 우선, 어디서든 바로 실행([06_open_questions.md](06_open_questions.md) DEC-002) |
+| 업로드 파일 경로는 허용 디렉터리 안으로 제한, 크기 20MB 상한 | 경로 탈출 방지([prd.md](prd.md) FR-CONV-003) |

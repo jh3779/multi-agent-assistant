@@ -6,15 +6,25 @@
 
 ```bash
 uv sync --dev
-cp .env.example .env   # OPENAI_API_KEY 등 채우기
+cp .env.example .env   # OPENAI_API_KEY, TAVILY_API_KEY 등 채우기(전체 목록은 README.md 환경변수 표)
 uv run uvicorn app.main:app --reload
 ```
 
-브라우저에서 http://127.0.0.1:8000 열면 채팅 UI가 뜬다.
+브라우저에서 http://127.0.0.1:8000 열면 채팅 UI가 뜬다. 파일 변환에는 시스템 바이너리 `pandoc`이 필요하다(macOS: `brew install pandoc`).
 
 ## 1. 채팅 UI에서 쓰기
 
-- 화면 하단 입력창에 텍스트를 치면 `/chat`으로 전송되고, `app/routers/chat.py`가 `FileConverterAgent`(실제 gpt-4o-mini 에이전트)를 호출해 SSE로 답변을 스트리밍함. 단, 텍스트 입력창은 파일 경로를 같이 보내지 않으므로 실제 변환은 안 하고 일반 질문에만 답함
+- 채팅 화면의 **에이전트 선택 버튼**(파일 변환 · KBO · Tech · 금융)으로 질문을 보낼 에이전트를 고른다. 선택에 따라 요청이 아래 엔드포인트로 간다.
+
+  | 버튼 | 엔드포인트 | 필요한 키 |
+  |---|---|---|
+  | 파일 변환 | `POST /chat` | `OPENAI_API_KEY` |
+  | KBO | `POST /kbo/stream` | `OPENAI_API_KEY`, `TAVILY_API_KEY` |
+  | Tech | `POST /tech/stream` | `OPENAI_API_KEY`, `TAVILY_API_KEY` |
+  | 금융 | `GET /finance/stream` | `OPENAI_API_KEY`, `TAVILY_API_KEY`(금리 조회는 `ECOS_API_KEY`) |
+
+- 답변은 스트리밍으로 표시되고, 도구 호출 상태와 에이전트 진행 로그(`/logs/stream`)가 화면에 함께 나온다
+- "파일 변환" 에이전트는 텍스트 입력창이 파일 경로를 같이 보내지 않으므로 실제 변환은 안 하고 일반 질문에만 답함
 - 파일 변환은 채팅 텍스트가 아니라 아래 드래그앤드롭 플로우로만 동작함
 - 파일을 채팅창 위로 드래그하면 지원 포맷인지 즉시 확인 → 변환할 포맷 선택 → "변환" 클릭 → 완료되면 다운로드 링크 표시
 
@@ -83,7 +93,7 @@ print(message.artifact)  # 변환된 바이트
 
 ## 4. 실제 LLM 에이전트로 호출하기 (데모/실험용)
 
-`app/llms/file_converter_agent.py`의 `FileConverterAgent`(팀 공용 `Agent(ABC)` 구현체)가 실제 OpenAI 모델이 스스로 도구 호출 여부를 판단하는 최소 에이전트다. 아직 HTTP 엔드포인트로는 안 열려있어서 코드에서 직접 호출해야 한다.
+`app/llms/file_converter_agent.py`의 `FileConverterAgent`(팀 공용 `Agent(ABC)` 구현체)가 실제 OpenAI 모델이 스스로 도구 호출 여부를 판단하는 최소 에이전트다. `POST /chat`이 이 에이전트를 열어 두지만 파일 경로를 받지 않으므로, 파일 변환까지 시험하려면 코드에서 직접 호출해야 한다.
 
 ```python
 from app.llms.file_converter_agent import FileConverterAgent
