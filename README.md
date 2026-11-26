@@ -15,6 +15,15 @@ LG CNS AI 캠퍼스 과정 2주차(8/10~8/14)에 4인 팀이 진행한 프로젝
 
 공통으로 `/`(채팅 UI), `/health`, `/logs/stream`(서버 로그 SSE)을 제공합니다. 모든 에이전트는 공용 추상 클래스 `Agent(ABC)`([app/llms/agent.py](app/llms/agent.py))를 상속합니다. 자세한 구조는 [docs/architecture.md](docs/architecture.md)를 참고하세요.
 
+## 팀
+
+| 이름 | 역할 |
+|---|---|
+| 우지훈 | 파일 변환 에이전트, 채팅 UI |
+| 정온지 | KBO 에이전트 |
+| 김 준 | Tech 에이전트 |
+| 한석희 | 금융 에이전트 |
+
 ## 빠른 시작
 
 요구 사항: Python 3.14 이상, [uv](https://docs.astral.sh/uv/), 시스템 바이너리 `pandoc`(파일 변환용, macOS는 `brew install pandoc`).
