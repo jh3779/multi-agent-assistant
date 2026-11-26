@@ -67,5 +67,5 @@
 | `LICENSE` | MIT 라이선스 |
 | `.pre-commit-config.yaml` | ruff, pyrefly, 개인 키 탐지(`detect-private-key`) 등 커밋 전 검사 |
 | `.github/workflows/ci.yml` | PR·`main` push 시 import 확인 + pyrefly 타입 체크 |
-| `src/lg_cns_aicampus/` | `uv` 패키지 스캐폴드(빈 `__init__.py`, 앱 코드는 `app/`에 있음) |
+| `src/multi_agent_assistant/` | `uv` 패키지 스캐폴드(`main()` 하나뿐, 앱 코드는 `app/`에 있음) |
 | `tests/` | 비어 있음 — 자동 테스트 없음 |

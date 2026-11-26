@@ -18,9 +18,6 @@ class Settings(BaseSettings):
     langchain_api_key: str = ""
     langchain_project: str = ""
     langchain_tracing_v2: str = "false"
-    naver_client_id: str = ""
-    naver_client_secret: str = ""
-    youtube_api_key: str = ""
     tavily_api_key: str = ""
 
     model_config = SettingsConfigDict(

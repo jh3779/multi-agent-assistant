@@ -179,10 +179,9 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 ## 15. Open Questions
 
 - 에이전트별 최소 회귀 테스트를 추가할지? (현재 자동 테스트 없음)
-- `app/setting.py`에 남은 `naver_client_id/secret`, `youtube_api_key`는 현재 코드에서 쓰이지 않는다 — 제거할지?
 - `docs/superpowers/specs/`의 YouTube 도구 설계서 2건은 코드에 구현되지 않았다 — 구현할지, 폐기할지?
 
-과거 질문의 처분: 프로젝트명은 "Multi-Agent Assistant"로 정했다(2026-11-26). business-agent는 금융 에이전트로 구현되었고, KBO 에이전트는 `Agent(ABC)`를 상속하도록 통일되었으며, 채팅 UI는 에이전트 선택 버튼으로 여러 에이전트를 쓴다(서버 측 라우팅 계층은 두지 않음). `architecture.md`는 현재 구조로 다시 썼다.
+과거 질문의 처분: 프로젝트명은 "Multi-Agent Assistant"로 정했고(2026-11-26), 뉴스봇 시절 설정(`naver_*`, `youtube_api_key`)은 제거했다. business-agent는 금융 에이전트로 구현되었고, KBO 에이전트는 `Agent(ABC)`를 상속하도록 통일되었으며, 채팅 UI는 에이전트 선택 버튼으로 여러 에이전트를 쓴다(서버 측 라우팅 계층은 두지 않음). `architecture.md`는 현재 구조로 다시 썼다.
 
 ## 16. 향후 확장 후보
 

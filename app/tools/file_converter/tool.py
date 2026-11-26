@@ -13,7 +13,7 @@ from app.tools.file_converter.exceptions import (
 # LLM이 자유롭게 채우는 file_path를 검증 없이 그대로 읽으면 임의 파일 읽기가
 # 가능해짐(예: ".env를 html로 변환해줘" 같은 프롬프트 인젝션). 이 디렉터리 밖의
 # 경로는 전부 거부한다 — 향후 업로드 파이프라인이 생기면 파일을 여기에 둘 것.
-ALLOWED_DIR = Path(tempfile.gettempdir()) / "lg-cns-file-converter-uploads"
+ALLOWED_DIR = Path(tempfile.gettempdir()) / "multi-agent-assistant-uploads"
 ALLOWED_DIR.mkdir(parents=True, exist_ok=True)
 
 
