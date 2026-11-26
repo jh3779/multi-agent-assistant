@@ -633,13 +633,13 @@ window.addEventListener("drop", (e) => {
 // 백엔드 로그 텍스트 자체는 그대로 보여주되(log-panel-body), 그 위에 에이전트별
 // "지금 어느 단계인지"를 요약하는 진행 카드(log-progress)를 얹는다. 카드 상태는
 // 이미 존재하는 로그 메시지의 "[TAG] ..." 접두사를 해석해서만 만든다 — 에이전트
-// 코드(kbo_agent.py/file_converter_agent.py) 자체는 건드리지 않는다.
+// 코드(kbo.py/file_converter_agent.py) 자체는 건드리지 않는다.
 
-// agent-selector 버튼(4개)과 1:1로 대응 — 새 에이전트가 백엔드에 연결되면 logger만
-// 채워주면 된다(business/agent4는 아직 로거가 없어 "미연결" 상태로 남는다).
+// agent-selector 버튼(4개)과 1:1로 대응 — logger가 비어 있는 항목은 "미연결"로 표시된다.
+// 새 에이전트를 붙이면 여기에 항목을 추가하고 logger를 채운다.
 const AGENT_META = [
   { key: "file_converter", label: "파일 변환", logger: "app.llms.file_converter_agent" },
-  // app/llms/kbo_agent.py → kbo.py로 파일명이 바뀌면서 로거 이름도 바뀜(logging.getLogger(__name__)).
+  // 로거 이름은 모듈 경로(logging.getLogger(__name__))를 따른다.
   { key: "kbo", label: "KBO", logger: "app.llms.kbo" },
   { key: "tech", label: "Tech", logger: "app.llms.tech" },
   // app/llms/business_agent.py는 백엔드 로깅이 없어 sendToFinance()가 SSE 이벤트를

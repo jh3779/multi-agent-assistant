@@ -14,7 +14,7 @@ from app.routers.tech import router as tech_router
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="LG CNS AI 캠퍼스 — 어시스턴트")
+app = FastAPI(title="Multi-Agent Assistant")
 
 setup_log_capture()
 
