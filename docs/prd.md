@@ -163,7 +163,7 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 ## 13. 제약과 정책
 
 - DB 연동·사용자 인증·클라우드 배포는 이번 블록 범위 밖(스코프 가드레일) — 각각 in-memory, 인증 없음, 로컬 uvicorn으로 대체한다.
-- 각 도구는 독립 브랜치에서 개발하고 PR로 병합한다([branching.md](branching.md) 참고). `main`에는 보호 규칙이 걸려 있다 — CI `test` 통과 필수(브랜치가 최신이어야 함), 관리자에게도 적용, force-push·브랜치 삭제 금지. 리뷰 승인은 필수로 설정되어 있지 않다([branching.md](branching.md) 참고).
+- 각 도구는 독립 브랜치에서 개발하고 PR로 병합한다([branching.md](branching.md) 참고). `main`에는 보호 규칙이 걸려 있다 — CI `test` 통과 필수(브랜치가 최신이어야 함), 대화(리뷰 코멘트 스레드) 해결 필수, 관리자에게도 적용, force-push·브랜치 삭제 금지. 리뷰 승인(Approve)은 필수로 설정되어 있지 않다([branching.md](branching.md) 참고).
 - Main LLM 오케스트레이션은 채택하지 않는다 — 도구 간 라우팅이 필요해지면 그때 별도로 재검토한다.
 
 ## 14. 리스크와 완화책
