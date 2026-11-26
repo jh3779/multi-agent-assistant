@@ -4,6 +4,8 @@
 
 > 8/14 발표 전까지 진행 내용에 맞춰 계속 갱신 필요. 이 문서는 팀 전체 발표 대본이 아니라 **내가 맡은 부분(file-converter 도구 + 채팅 UI)** 기준으로 작성 — 다른 담당자 파트는 각자 채워 넣어야 함.
 
+> **기준 시점 안내(2026-11-26)**: 3절 "현재까지 진행 상태"와 4절 역할·리스크는 2026-08-12 작성 내용을 바탕으로 PR 상태·엔드포인트·에이전트 구성만 현재 `main` 기준으로 정정했다. 현재 구조는 [architecture.md](architecture.md)를 참고.
+
 ## 1. 주제 선정 배경 (문제 상황 해결)
 
 **원래 주제 → 방향 전환**
@@ -67,10 +69,10 @@
 - `GET /` — 채팅 UI 정적 페이지
 
 **현재까지 진행 상태**
-- file-converter + 채팅 UI + 관련 문서를 PR #6으로 묶어서 올림, 리뷰 대기 중
-- 팀원의 KBO 야구 Q&A 에이전트가 PR #7로 올라옴(웹 검색+날짜 도구, 생성→검증→수정 루프, `POST /kbo/query`) — 리뷰 대기 중, 아직 main 미병합
-- business-agent 담당 팀원은 아직 베이스 클래스 스캐폴딩 단계 — 실제 기능 미착수
-- main 브랜치는 현재 보호 규칙 해제 상태(팀 판단으로 계속 열어두기로 함)
+- file-converter + 채팅 UI + 관련 문서는 PR #6으로 올렸으나 CLOSED — 통합 브랜치 PR #8로 `main`에 병합됨(2026-08-14)
+- KBO 에이전트(PR #7, CLOSED)도 통합 브랜치로 흡수되어 병합됨 — 현재 엔드포인트는 `POST /kbo/invoke`, `POST /kbo/stream`
+- business-agent는 금융 에이전트(`BusinessAgent`, `/finance/*`)로 구현되었고, Tech 에이전트(`/tech/stream`)도 추가되어 채팅 UI의 에이전트 선택 버튼으로 연결됨
+- `main`에는 CI `test` 통과 필수·force-push 금지 등 보호 규칙이 걸려 있음(리뷰 승인은 강제하지 않음, [branching.md](branching.md))
 
 ## 4. 구현 방식 (소통 방법, 역할 분담)
 
@@ -84,13 +86,13 @@
 |---|---|---|
 | 도구호출 + 웹 디자인 | 나 | file-converter 도구(HTTP API + LangChain Tool + `Agent(ABC)` 구현체), 채팅 UI(다크모드, SSE, 파일 업로드) |
 | Agent 베이스 클래스 | 421079a | `app/llms/agent.py`(`Agent(ABC)`), `app/tools/base.py`(`BaseTool`) — 계속 갱신 중 |
-| KBO 야구 Q&A 에이전트 | 팀원(kbo-agent 브랜치) | 웹 검색(Tavily)+날짜 도구, 생성→검증→수정 루프, `POST /kbo/query`(PR #7) |
-| business-agent | 팀원(business-agent 브랜치) | 스캐폴딩만 존재, 실제 주제·기능 미정 |
+| KBO 야구 Q&A 에이전트 | 팀원(kbo-agent 브랜치) | 웹 검색(Tavily)+날짜 도구, 생성→검증→수정 루프, `POST /kbo/invoke`·`/kbo/stream` |
+| 금융 에이전트(구 business-agent) · Tech 에이전트 | 팀원 | 주가·환율·금리 도구 + 웹 검색, 작성→평가→재작성 / 웹 검색 기반 기술 Q&A — 각각 `/finance/*`, `/tech/stream` |
 
 **작업 순서**: 팀원이 공통 베이스 클래스(`Agent`, `BaseTool`)를 만들고, 그 위에서 각자 자기 Tool을 독립적으로 구현 → FastAPI 앱(`app/main.py`)에 라우터/도구로 연결하는 방식. 카테고리별로 서비스를 통째로 나누는 방식(뉴스봇 시절 결정)도, Main LLM이 전부 오케스트레이션하는 방식도 둘 다 기각하고, 지금은 "각자 도구 + 필요하면 나중에 라우팅 계층 추가"로 정리됨.
 
 **남은 리스크(발표 전 팀이 정해야 할 것)**
 - `POST /chat`을 TestClient로만 검증했고 실제 브라우저에서 시각적으로 확인은 안 함 — 발표 전 로컬에서 직접 열어서 확인 필요
 - 채팅 텍스트로는 파일 경로를 못 넘기므로, `/chat`을 통한 "자연어로 파일 변환 요청" 데모는 안 됨(파일 변환은 여전히 드래그앤드롭 전용) — 발표 시나리오에서 이 경계를 명확히 설명해야 오해가 없음
-- business-agent 범위·담당 미정 — 발표 전 완성 불투명
-- PR #6, #7 리뷰·병합 일정 미정
+- (해소) business-agent는 금융 에이전트로 구현됨
+- (해소) PR #6·#7은 통합 브랜치 PR #8로 병합됨

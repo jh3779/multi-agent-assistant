@@ -1,10 +1,10 @@
-# PRD — LG CNS AI 캠퍼스 팀 프로젝트 (도구 모음)
+# PRD — Multi-Agent Assistant
 
-작성일: 2026-08-07 / 개정: 2026-08-12
-상태: Draft v0.2 — "뉴스봇" 단일 제품 컨셉과 Main Agent 오케스트레이션을 모두 폐기하고, 팀원 각자가 독립 도구/에이전트를 만들어 FastAPI로 연결하는 구조로 전면 재작성
+작성일: 2026-08-07 / 개정: 2026-11-26
+상태: v0.3 — v0.2(2026-08-12)의 방향(독립 에이전트를 하나의 FastAPI 앱으로 연결)은 그대로 두고, 이후 병합된 Tech·금융 에이전트와 채팅 UI 에이전트 선택을 반영해 현재 `main` 코드와 맞췄다
 범위: 팀원별 독립 LLM 도구/에이전트를 하나의 FastAPI 앱에 라우터로 모아 제공
 
-> 이 문서는 v0.1(뉴스봇 PRD)을 대체한다. 라우팅 설계 문서([architecture.md](architecture.md))는 아직 v0.1 시절 "카테고리 라우팅" 설계를 담고 있어 이 버전과 맞지 않음 — 참고 시 주의.
+> 이 문서는 v0.1(뉴스봇 PRD)을 대체한다. 현재 구조는 [architecture.md](architecture.md), 파일별 역할은 [navigation.md](navigation.md)에 있다. 아래 3·6절의 목표·지표와 11절 진행 경과는 당시 계획(8/14 발표 기준)을 보존한 기록이다.
 
 ## 1. 한 문장 정의
 
@@ -26,6 +26,8 @@
 
 - **file-converter**: 문서 포맷을 바꾸려면 매번 별도 프로그램/웹사이트를 거쳐야 해 번거롭다.
 - **KBO 에이전트**: 최신 KBO 순위·경기 결과·일정처럼 시의성이 중요한 정보를 LLM이 사전 지식만으로 답하면 오래된 정보이거나 환각(hallucination)일 위험이 크다.
+- **Tech 에이전트**: 기술 질문에 출처 없는 답변이 나오면 신뢰하기 어렵다 — 웹 검색 근거와 출처를 붙이고 답변 품질을 검증한다.
+- **금융 에이전트**: 주가·환율·금리는 실시간 값이 필요해 LLM 사전 지식으로는 답할 수 없다 — 조회 도구로 값을 가져와 답변하고 평가한다.
 - **팀 공통**: 5일 스프린트에서 4인이 각자 실제로 동작하는 LLM 도구를 만들어, 과정에서 요구하는 필수요건 6종을 팀 전체로 채워야 한다.
 
 ### 목표
@@ -54,21 +56,23 @@
 |---|---|
 | 완성된 도구/에이전트 수 | 4인 중 최소 3개 이상 실동작 |
 | 필수요건 6종 충족 | 팀 전체 기준으로 6종 모두 최소 한 곳 이상에서 충족 |
-| PR 리뷰·병합 | 8/14 발표 전 열려 있는 PR(현재 #6, #7) 최소 1회 리뷰 후 병합 |
+| PR 리뷰·병합 | 8/14 발표 전 열려 있던 PR(당시 #6, #7) 최소 1회 리뷰 후 병합 — 결과: 두 PR은 닫히고 통합 브랜치 PR #8로 병합됨(11절) |
 | file-converter 변환 정확도 | 지원 포맷 9종 왕복 테스트에서 한글/다국어 문자 깨짐 없음(회귀 방지, [07_usage.md](07_usage.md) 참고) |
 | KBO 에이전트 응답 신뢰도 | 검증(validation) 단계에서 근거 없는 주장 발견 시 자동 재작성(correction) 경로 통과 |
 
 ## 7. MVP 범위
 
 **완료**
-- file-converter 도구 — HTTP API(`POST /tools/file-converter/convert`, `GET /tools/file-converter/formats`) + LangChain `@tool` 함수(`file_converter`) 두 형태로 제공. PR #6 OPEN.
-- 채팅 UI(`app/static/`) — 다크모드, 파일 드래그·업로드·변환, 도구 호출 상태 표시. PR #6 OPEN.
-- 공통 베이스 클래스 — `Agent(ABC)`(`app/llms/agent.py`), `BaseTool`(`app/tools/base.py`). main 병합됨.
-- KBO 에이전트 — 웹 검색(Tavily) + 날짜 도구, 답변 생성→검증→(필요 시) 수정 루프, `POST /kbo/query`. PR #7 OPEN.
-- 채팅 UI ↔ 실제 LLM 백엔드 연결 — 프론트 검증용이던 목(mock, `chat_mock.py`)을 폐기하고 `app/routers/chat.py`가 `FileConverterAgent`를 실제로 호출하는 `POST /chat` SSE 엔드포인트로 대체. 단 채팅 텍스트는 파일 경로를 안 보내므로 일반 질문에만 답하고, 실제 파일 변환은 여전히 드래그앤드롭 전용.
+- file-converter 도구 — HTTP API(`POST /tools/file-converter/convert`, `GET /tools/file-converter/formats`) + LangChain `@tool` 함수(`file_converter`) 두 형태로 제공.
+- 채팅 UI(`app/static/`) — 다크모드, 에이전트 선택 버튼(파일 변환·KBO·Tech·금융), 파일 드래그·업로드·변환, 도구 호출 상태·에이전트 진행 로그 표시.
+- 공통 베이스 클래스 — `Agent(ABC)`(`app/llms/agent.py`), `BaseTool`(`app/tools/base.py`). 4개 에이전트 모두 `Agent`를 상속한다.
+- KBO 에이전트 — 웹 검색(Tavily) + 날짜 도구, 답변 생성→검증→(필요 시) 수정 루프, `POST /kbo/invoke`·`POST /kbo/stream`.
+- Tech 에이전트 — 웹 검색 기반 답변과 출처, 답변 품질 검증, `POST /tech/stream`(SSE).
+- 금융 에이전트(`BusinessAgent`) — 주가·환율·금리 도구 + 웹 검색, 답변 작성→평가→재작성, `POST /finance/ask`·`GET /finance/stream`(SSE).
+- 채팅 UI ↔ 실제 LLM 백엔드 연결 — 프론트 검증용이던 목(mock, `chat_mock.py`)을 폐기하고 `POST /chat`이 `FileConverterAgent`를 실제로 호출한다. 단 채팅 텍스트는 파일 경로를 안 보내므로 일반 질문에만 답하고, 실제 파일 변환은 드래그앤드롭 전용.
 
-**진행 중 / 미정**
-- business-agent — 베이스 클래스를 상속할 준비만 된 스캐폴딩 상태, 실제 기능 미착수(담당자·범위 미정).
+**미정**
+- 자동 테스트 — 현재 `tests/`가 비어 있고 CI는 import 확인과 타입 체크만 수행한다.
 
 **Won't (스코프 제외, 팀 결정으로 폐기)**
 - Main LLM이 하위 Tool을 라우팅하는 오케스트레이션 계층.
@@ -81,11 +85,14 @@
 | FR-CONV-001 | `file_converter`가 docx/html/md/odt/rtf/pptx/epub/rst/txt 간 변환을 지원한다(PDF 미지원 — pandoc이 PDF를 입력으로 읽지 못함) |
 | FR-CONV-002 | 변환 기능을 HTTP API(`POST /tools/file-converter/convert`)와 LangChain `@tool` 함수(`file_converter`, `bind_tools()`로 LLM에 노출 가능) 두 경로로 제공한다 |
 | FR-CONV-003 | 업로드 파일 경로는 허용 디렉터리(`ALLOWED_DIR`) 밖을 벗어날 수 없다(경로 탈출 방지), 업로드 크기 상한(20MB)을 둔다 |
-| FR-KBO-001 | `POST /kbo/query`가 자연어 질문을 받아 KBO 관련 답변을 반환한다 |
+| FR-KBO-001 | `POST /kbo/invoke`(완성 답변)와 `POST /kbo/stream`(스트리밍)이 자연어 질문을 받아 KBO 관련 답변을 반환한다 |
 | FR-KBO-002 | 시의성 정보(순위/일정/결과 등)가 필요하면 에이전트가 자율적으로 웹 검색(Tavily) 도구를 호출해 근거를 수집한다 |
 | FR-KBO-003 | 초안 답변을 별도 검증(validation) LLM 호출로 사실관계·날짜 일관성을 점검하고, 불합격 시 근거에 기반해 자동으로 다시 작성(correction)한다 |
-| FR-BASE-001 | 팀 공용 `Agent(ABC)`가 `create_system_prompt`/`create_human_prompt`/`create_workflow`/`validate_tool_result`/`answer_validation`/`astream` 추상 메서드를 정의해, 각 도구가 최소한의 동일한 인터페이스를 따르도록 한다. `FileConverterAgent`가 첫 실제 구현체(`app/llms/file_converter_agent.py`) — `astream`이 `AsyncIterator[str]`만 반환할 수 있어 변환된 파일 바이트(artifact)는 반환값이 아니라 `self.memory["artifacts"]`에 담아 호출자가 실행 후 꺼내 쓰게 함. KBO 에이전트는 아직 이 베이스를 상속하지 않고 독립 클래스로 구현되어 있음 — 통일 여부는 Open Question |
+| FR-BASE-001 | 팀 공용 `Agent(ABC)`가 `create_system_prompt`/`create_human_prompt`/`create_workflow`/`answer_validation`/`astream` 추상 메서드를 정의해, 각 도구가 최소한의 동일한 인터페이스를 따르도록 한다. `FileConverterAgent`가 첫 실제 구현체(`app/llms/file_converter_agent.py`) — `astream`이 `AsyncIterator[str]`만 반환할 수 있어 변환된 파일 바이트(artifact)는 반환값이 아니라 `self.memory["artifacts"]`에 담아 호출자가 실행 후 꺼내 쓰게 함. KBO·Tech·금융 에이전트도 모두 이 베이스를 상속한다 |
 | FR-BASE-002 | 팀 공용 `BaseTool`이 `settings`(API 키 등)를 공유해, 각 도구가 설정 로딩을 중복 구현하지 않게 한다 |
+| FR-TECH-001 | `POST /tech/stream`이 기술 질문을 받아 웹 검색 근거와 출처를 포함한 답변을 SSE로 스트리밍하고, 답변 품질 검증을 거친다(`TechAgentResponse.status`: success·unsupported·insufficient_sources·validation_failed) |
+| FR-FIN-001 | `POST /finance/ask`(완성 답변)와 `GET /finance/stream`(SSE)이 금융 질문에 주가·환율·금리 조회 도구와 웹 검색으로 답하고, 평가 단계에서 불합격이면 재작성한다 |
+| FR-CHAT-002 | 채팅 UI는 에이전트 선택 버튼(파일 변환·KBO·Tech·금융)으로 요청을 해당 에이전트 엔드포인트로 보낸다. 서버 측 라우팅은 없다 |
 | FR-CHAT-001 | `POST /chat`(`app/routers/chat.py`)이 `FileConverterAgent.astream()`을 SSE(`text/event-stream`)로 노출한다. 이벤트 계약(`tool_start`/`tool_end`/`answer_chunk`/`done`)은 폐기된 목(mock)과 동일하게 맞춰 프론트(`chat.js`) 수정 없이 재사용한다. 채팅 텍스트는 파일 경로를 같이 보내지 않으므로, 실제 파일 변환 요청이 아니라 일반 질문에 답하는 용도로만 쓰인다 |
 | FR-008 | API 키(OpenAI, Tavily 등)는 `.env`로 관리하고 저장소에 커밋하지 않는다 |
 
@@ -111,7 +118,7 @@
 ### FLOW-KBO-001 · KBO 질의응답
 
 ```
-사용자 질문(POST /kbo/query)
+사용자 질문(POST /kbo/invoke 또는 /kbo/stream)
 → 모델이 필요 시 web_search/date_time 도구를 자율 호출(최대 5회 반복)
 → 도구 결과를 근거(evidence)로 모아 초안 답변 생성
 → 검증 LLM이 사실관계·날짜 일관성 점검(Pydantic ValidationResult)
@@ -140,6 +147,8 @@
 | 2026-08-10 | 브랜치 규칙(PR #1), 최소 CI(PR #2), 멀티 에이전트 설계 노트(PR #3), uv 세팅 정리(PR #4) 병합 |
 | 2026-08-11 | Main Agent 초안 PR #5 CLOSED(오케스트레이션 방향 폐기 확정), file-converter + 채팅 UI PR #6 OPEN |
 | 2026-08-12 | KBO 에이전트 PR #7 OPEN, 본 PRD v0.2로 재작성 |
+| 2026-08-14 | file-converter·KBO·Tech·금융 에이전트를 모은 통합 브랜치(`integration/file-converter-kbo-agent`)가 PR #8로 `main`에 병합됨. PR #6·#7은 CLOSED(통합 브랜치로 흡수) |
+| 2026-11-26 | 문서를 현재 `main` 코드 기준으로 정합(PRD v0.3, README·architecture·navigation 재작성) |
 
 ## 12. 데이터 모델
 
@@ -147,31 +156,33 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 
 - `app/schemas/file_converter.py` — `FileConverterArgs`(file_path, target_format), `FileConversionAnswer`(used_tool, tool_name, summary)
 - `app/schemas/kbo.py` — `KBORequest`(query), `KBOResponse`(answer), `ValidationResult`(is_valid, reason, correction)
+- `app/schemas/tech.py` — `TechQuestionRequest`, `TechAnswer`(topic, answer, example, sources), `TechAgentResponse`(status 등), `TechStreamEvent`
+- `app/schemas/finance.py` — `FinanceQuestionRequest`, `FinanceAnswerResponse`, `FinanceStreamEvent`(type: answer·done·error)
+- `app/schemas/evaluation.py` — `AnswerEvaluation`(금융 에이전트 답변 평가의 구조화 출력)
 
 ## 13. 제약과 정책
 
 - DB 연동·사용자 인증·클라우드 배포는 이번 블록 범위 밖(스코프 가드레일) — 각각 in-memory, 인증 없음, 로컬 uvicorn으로 대체한다.
-- 각 도구는 독립 브랜치에서 개발하고 PR로 병합한다([branching.md](branching.md) 참고). main 브랜치는 현재 보호 규칙이 해제된 상태(팀 판단으로 계속 열어두기로 함).
+- 각 도구는 독립 브랜치에서 개발하고 PR로 병합한다([branching.md](branching.md) 참고). `main`에는 보호 규칙이 걸려 있다 — CI `test` 통과 필수(브랜치가 최신이어야 함), 관리자에게도 적용, force-push·브랜치 삭제 금지. 리뷰 승인은 필수로 설정되어 있지 않다([branching.md](branching.md) 참고).
 - Main LLM 오케스트레이션은 채택하지 않는다 — 도구 간 라우팅이 필요해지면 그때 별도로 재검토한다.
 
 ## 14. 리스크와 완화책
 
 | 리스크 | 완화책 |
 |---|---|
-| business-agent가 아직 스캐폴딩 단계라 발표 전 미완성일 위험 | 담당·범위를 조속히 확정 필요(Open Question), 최악의 경우 팀 전체 필수요건 6종은 file-converter+KBO 두 도구만으로도 채울 수 있는지 사전 점검 |
-| `POST /chat`을 브라우저에서 시각적으로 확인하지 않은 상태로 발표를 맞을 위험 | TestClient로는 검증됐으나, 발표 전 로컬에서 직접 열어서 확인 필요 |
-| PR #6, #7이 리뷰 없이 오래 열려 있을 위험 | 셀프 머지 금지 규칙 유지, 발표 전 최소 1회 상호 리뷰 후 병합 |
-| main 브랜치 보호 규칙이 해제돼 있어 실수로 깨진 코드가 바로 반영될 위험 | 각자 로컬에서 pre-commit(ruff/pyrefly) 통과 후 푸시하는 관행 유지 |
-| KBO 에이전트가 `Agent(ABC)` 공통 베이스를 상속하지 않아, 다른 도구와 인터페이스가 갈라질 위험 | 팀 논의로 통일할지, 도구별 자율성을 유지할지 결정 필요(Open Question) |
+| 자동 테스트가 없어(`tests/` 비어 있음) 회귀를 사람이 직접 확인해야 한다 | CI의 import 확인·pyrefly와 pre-commit(ruff·pyrefly)이 최소 방어선. 에이전트별 최소 회귀 테스트 추가는 미정 |
+| 에이전트마다 SSE 프레임 형식이 달라 프론트(`chat.js`)가 파서를 따로 둔다 | 형식 차이를 [architecture.md](architecture.md) 스트리밍 표에 기록. 새 에이전트를 붙일 때 이 표를 갱신 |
+| 상태를 인스턴스에 들고 있는 에이전트(`BusinessAgent`)를 공유하면 요청 간 상태가 섞인다 | `app/dependencies.py`가 요청마다 새 인스턴스를 만든다 |
+| LLM 자기검증 단계가 오판할 수 있다(검증 LLM이 근거보다 자기 사전 지식을 우선하는 경우) | KBO·Tech·금융 모두 검증/평가 단계를 두고 있으나, 검증 결과의 정확도는 따로 측정하지 않았다 |
+| API 키가 저장소에 들어갈 위험 | `.env`는 `.gitignore`로 제외, pre-commit `detect-private-key` 적용 |
 
 ## 15. Open Questions
 
-- business-agent의 실제 주제·범위·담당자는? (현재 스캐폴딩만 존재)
-- `/chat`이 지금은 `FileConverterAgent`(file-converter 담당 범위) 하나에만 연결돼 있음 — KBO 에이전트 등 다른 도구도 채팅으로 쓸 수 있게 할지, 한다면 어떻게 여러 도구를 하나의 `/chat`에서 고를지(라우팅 계층 재검토?)
-- "뉴스봇" 대체 프로젝트명을 새로 정할지, 아니면 "도구 모음" 형태로 계속 갈지?
-- `architecture.md`(v0.1 카테고리 라우팅 설계)를 이 버전에 맞게 다시 쓸지, 폐기할지?
-- KBO 에이전트를 공통 `Agent(ABC)` 베이스로 리팩터링할지, 독립 구현을 유지할지?
-- PR #6(file-converter), #7(KBO 에이전트)의 리뷰·병합 일정은?
+- 에이전트별 최소 회귀 테스트를 추가할지? (현재 자동 테스트 없음)
+- `app/setting.py`에 남은 `naver_client_id/secret`, `youtube_api_key`는 현재 코드에서 쓰이지 않는다 — 제거할지?
+- `docs/superpowers/specs/`의 YouTube 도구 설계서 2건은 코드에 구현되지 않았다 — 구현할지, 폐기할지?
+
+과거 질문의 처분: 프로젝트명은 "Multi-Agent Assistant"로 정했다(2026-11-26). business-agent는 금융 에이전트로 구현되었고, KBO 에이전트는 `Agent(ABC)`를 상속하도록 통일되었으며, 채팅 UI는 에이전트 선택 버튼으로 여러 에이전트를 쓴다(서버 측 라우팅 계층은 두지 않음). `architecture.md`는 현재 구조로 다시 썼다.
 
 ## 16. 향후 확장 후보
 
@@ -181,9 +192,8 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 
 ## 17. 완료 기준 (MVP)
 
-- [ ] file-converter, KBO 에이전트가 실제 데이터로 동작하는 것을 시연한다(둘 다 실제 API 키 기준 검증 완료 — 배포/발표 환경에서 재확인 필요)
-- [ ] business-agent의 범위가 확정되고 최소 기능이 구현된다
-- [x] 채팅 UI가 최소 하나의 실제 백엔드에 연결된다 (`POST /chat` → `FileConverterAgent`, TestClient로 검증됨 — 브라우저 육안 확인은 아직)
-- [ ] 필수요건 6종(엔드포인트 2개↑·프롬프트템플릿·Pydantic구조화·SSE스트리밍·LangSmith·`.env`)이 팀 전체 기준으로 모두 반영된다
-- [ ] PR #6, #7이 리뷰를 거쳐 main에 병합된다
-- [ ] 본 PRD와 팀 문서([navigation.md](navigation.md), [architecture.md](architecture.md), [presentation.md](presentation.md))가 실제 코드와 일치하는 상태로 정리된다(현재 architecture.md/navigation.md는 v0.1 기준으로 남아있어 갱신 필요)
+- [x] file-converter, KBO, Tech, 금융 에이전트가 `main`에 병합되어 있다(PR #8, 2026-08-14)
+- [x] 채팅 UI가 실제 백엔드에 연결되어 있고, 에이전트 선택 버튼으로 4개 에이전트를 호출한다(`app/static/chat.js`)
+- [x] CI 동등 체크(import 확인, pyrefly, ruff)가 통과한다(2026-11-26 로컬 확인)
+- [x] 필수요건 중 코드로 확인되는 5종(엔드포인트·프롬프트 템플릿·Pydantic 구조화 출력·SSE·`.env` 키 관리)을 [README.md](../README.md)에 체크했다. LangSmith 공유 트레이스 링크는 트레이스 내용(질문·답변·도구 호출)이 외부에 노출되므로 공개 저장소에는 첨부하지 않기로 결정했다(2026-11-26, 트레이싱 설정 자체는 `.env`로 지원)
+- [x] 본 PRD와 [README.md](../README.md), [architecture.md](architecture.md), [navigation.md](navigation.md)가 현재 코드와 일치한다(2026-11-26 정비)

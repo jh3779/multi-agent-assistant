@@ -1,7 +1,7 @@
 [project]
-name = "lg-cns-aicampus"
+name = "multi-agent-assistant"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-agent assistant: file conversion, KBO, tech Q&A and finance agents behind one FastAPI app, with a chat UI that shows tool calls"
 readme = "README.md"
 authors = []
 requires-python = ">=3.14"
