@@ -1,4 +1,4 @@
-# PRD — LG CNS AI 캠퍼스 팀 프로젝트 (도구 모음)
+# PRD — Multi-Agent Assistant
 
 작성일: 2026-08-07 / 개정: 2026-11-26
 상태: v0.3 — v0.2(2026-08-12)의 방향(독립 에이전트를 하나의 FastAPI 앱으로 연결)은 그대로 두고, 이후 병합된 Tech·금융 에이전트와 채팅 UI 에이전트 선택을 반영해 현재 `main` 코드와 맞췄다
@@ -178,12 +178,11 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 
 ## 15. Open Questions
 
-- "뉴스봇" 대체 프로젝트명을 새로 정할지, 아니면 "도구 모음" 형태로 계속 갈지?
 - 에이전트별 최소 회귀 테스트를 추가할지? (현재 자동 테스트 없음)
 - `app/setting.py`에 남은 `naver_client_id/secret`, `youtube_api_key`는 현재 코드에서 쓰이지 않는다 — 제거할지?
 - `docs/superpowers/specs/`의 YouTube 도구 설계서 2건은 코드에 구현되지 않았다 — 구현할지, 폐기할지?
 
-과거 질문의 처분: business-agent는 금융 에이전트로 구현되었고, KBO 에이전트는 `Agent(ABC)`를 상속하도록 통일되었으며, 채팅 UI는 에이전트 선택 버튼으로 여러 에이전트를 쓴다(서버 측 라우팅 계층은 두지 않음). `architecture.md`는 현재 구조로 다시 썼다.
+과거 질문의 처분: 프로젝트명은 "Multi-Agent Assistant"로 정했다(2026-11-26). business-agent는 금융 에이전트로 구현되었고, KBO 에이전트는 `Agent(ABC)`를 상속하도록 통일되었으며, 채팅 UI는 에이전트 선택 버튼으로 여러 에이전트를 쓴다(서버 측 라우팅 계층은 두지 않음). `architecture.md`는 현재 구조로 다시 썼다.
 
 ## 16. 향후 확장 후보
 
@@ -196,5 +195,5 @@ ERD 없음(DB 연동 없이 무상태 처리). 도구별 Pydantic 스키마:
 - [x] file-converter, KBO, Tech, 금융 에이전트가 `main`에 병합되어 있다(PR #8, 2026-08-14)
 - [x] 채팅 UI가 실제 백엔드에 연결되어 있고, 에이전트 선택 버튼으로 4개 에이전트를 호출한다(`app/static/chat.js`)
 - [x] CI 동등 체크(import 확인, pyrefly, ruff)가 통과한다(2026-11-26 로컬 확인)
-- [ ] 필수요건 6종 중 LangSmith 공유 트레이스 링크가 첨부된다([README.md](../README.md) 체크리스트 — 나머지 5종은 코드로 확인됨)
+- [x] 필수요건 중 코드로 확인되는 5종(엔드포인트·프롬프트 템플릿·Pydantic 구조화 출력·SSE·`.env` 키 관리)을 [README.md](../README.md)에 체크했다. LangSmith 공유 트레이스 링크는 트레이스 내용(질문·답변·도구 호출)이 외부에 노출되므로 공개 저장소에는 첨부하지 않기로 결정했다(2026-11-26, 트레이싱 설정 자체는 `.env`로 지원)
 - [x] 본 PRD와 [README.md](../README.md), [architecture.md](architecture.md), [navigation.md](navigation.md)가 현재 코드와 일치한다(2026-11-26 정비)

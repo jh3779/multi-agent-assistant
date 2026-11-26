@@ -6,7 +6,7 @@
 
 | 경로 | 내용 |
 |---|---|
-| `README.md` | 프로젝트 소개, 에이전트 목록, 빠른 시작, 필수요건 6종 체크리스트 |
+| `README.md` | 프로젝트 소개, 에이전트 목록, 빠른 시작, 필수요건 체크리스트 |
 | `docs/prd.md` | 한 문장 정의, 범위, 기능·비기능 요구사항, 진행 경과, 리스크 |
 | `docs/architecture.md` | 계층 구조, 에이전트별 파이프라인, 스트리밍 형식, 설계 결정 |
 | `docs/navigation.md` | 이 문서 |
@@ -15,7 +15,6 @@
 | `docs/presentation.md` | 발표 준비 자료(파일 변환 + 채팅 UI 담당 파트 기준) |
 | `docs/00_project_brief.md` ~ `docs/03_screen_contract.md`, `docs/06_open_questions.md` | 채팅 UI 요구사항 인터뷰 정본(브리프·요구사항·UI 플로우·화면 계약·미결 질문·결정 로그) |
 | `docs/multi-agent.md` | 채택하지 않은 메인/서브 에이전트 오케스트레이션 설계 메모 |
-| `docs/course-reference.md` | 교육 내용(비동기·FastAPI·Pydantic·SSE)과 코드 구조 연결 |
 | `docs/superpowers/specs/` | YouTube 도구 설계서 2건 — **현재 코드에는 구현되어 있지 않음**(각 문서 상단 참고) |
 
 ## 앱 진입점·설정 (`app/`)
@@ -65,6 +64,7 @@
 | `pyproject.toml`, `uv.lock` | 의존성(uv), ruff·pyrefly 설정 |
 | `.env.example` | 필요한 환경변수 목록 — 복사해서 `.env`로 채울 것([README.md](../README.md) 환경변수 표 참고) |
 | `.gitignore` | `.venv/`, `__pycache__/`, `.env` 등 커밋 제외 |
+| `LICENSE` | MIT 라이선스 |
 | `.pre-commit-config.yaml` | ruff, pyrefly, 개인 키 탐지(`detect-private-key`) 등 커밋 전 검사 |
 | `.github/workflows/ci.yml` | PR·`main` push 시 import 확인 + pyrefly 타입 체크 |
 | `src/lg_cns_aicampus/` | `uv` 패키지 스캐폴드(빈 `__init__.py`, 앱 코드는 `app/`에 있음) |
