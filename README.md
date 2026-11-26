@@ -1,8 +1,15 @@
 # Multi-Agent Assistant
 
+[![CI](https://github.com/jh3779/multi-agent-assistant/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jh3779/multi-agent-assistant/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/jh3779/multi-agent-assistant)](LICENSE)
+[![Python 3.14+](https://img.shields.io/badge/python-3.14%2B-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+
 LG CNS AI 캠퍼스 과정 2주차(8/10~8/14)에 4인 팀이 진행한 프로젝트입니다. 팀원이 각자 독립적으로 만든 LLM 에이전트(문서 변환 · KBO 야구 · 기술 Q&A · 금융)를 하나의 FastAPI 앱에 라우터로 모으고, 웹 채팅 UI에서 에이전트를 골라 쓰면서 도구 호출 과정을 실시간으로 볼 수 있게 한 프로젝트입니다.
 
 > 처음엔 "뉴스봇"으로 시작했다가 팀 논의로 방향을 바꿨습니다. 변경 배경은 [docs/prd.md](docs/prd.md)와 [docs/presentation.md](docs/presentation.md)에 있습니다.
+
+![채팅 UI — 하단의 버튼으로 파일 변환·KBO·Tech·금융 에이전트를 고릅니다](docs/images/chat-ui.png)
 
 ## 에이전트
 
